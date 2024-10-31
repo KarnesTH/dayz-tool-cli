@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-pub mod generators;
+pub mod commands;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum GuidError {
