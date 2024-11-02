@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use dayz_tool_cli::commands::generate_guid;
+use dayz_tool_cli::commands::{calculate_dnc, generate_guid};
 use dayz_tool_cli::utils::{create_initial_profile, get_config_path};
 
 #[derive(Parser)]
@@ -34,8 +34,10 @@ enum Commands {
     /// dayz-tool-cli dnc -d "8h" -n "10min"
     /// ```
     Dnc {
+        /// The amount of time the server should be in day time. (e.g. 8h, 10min)
         #[arg(short = 'd', long)]
         day: Option<String>,
+        /// The amount of time the server should be in night time. (e.g. 8h, 10min)
         #[arg(short = 'n', long)]
         night: Option<String>,
     },
@@ -46,7 +48,7 @@ fn main() {
 
     if !config_path.exists() {
         match create_initial_profile(&config_path) {
-            Ok(_) => println!("Initial profile created"),
+            Ok(_) => println!("Initial profile created successfully! You can now use the CLI. Run `dayz-tool-cli --help` for more information."),
             Err(_) => println!("Failed creating initial profile"),
         }
     } else {
@@ -60,8 +62,17 @@ fn main() {
                 None => println!("No ID provided"),
             },
             Commands::Dnc { day, night } => {
-                println!("Day: {:?}", day);
-                println!("Night: {:?}", night);
+                if let (Some(day), Some(night)) = (day, night) {
+                    match calculate_dnc(day, night) {
+                        Ok((day_duration, night_duration)) => {
+                            println!("serverTimeAcceleration = {}", day_duration);
+                            println!("serverNightTimeAcceleration = {}", night_duration);
+                        }
+                        Err(e) => println!("{}", e),
+                    }
+                } else {
+                    println!("Bitte geben Sie sowohl die Tag- als auch die Nachtlänge an.");
+                }
             }
         }
     }

@@ -12,11 +12,12 @@ use std::path::PathBuf;
 /// # Example
 ///
 /// ```rust
-/// use dayz_tool_cli::get_config_path;
+/// use std::path::PathBuf;
+/// use dayz_tool_cli::utils::get_config_path;
 ///
 /// let config_path = get_config_path();
 ///
-/// assert_eq!(config_path, PathBuf::from("/home/user/.dayz-tool/config.json"));
+/// assert_eq!(config_path, PathBuf::from("/home/karnes/.dayz-tool/config.json"));
 /// ```
 pub fn get_config_path() -> PathBuf {
     let home_dir = match env::var("HOME") {
@@ -24,7 +25,7 @@ pub fn get_config_path() -> PathBuf {
         Err(_) => match env::var("USERPROFILE") {
             Ok(path) => PathBuf::from(path),
             Err(_) => {
-                panic!("Home-Verzeichnis nicht gefunden!");
+                panic!("Failed to get the user's home directory.");
             }
         },
     };
@@ -51,7 +52,7 @@ pub fn add_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), Confi
     let json = to_string_pretty(&config).unwrap();
 
     if let Err(e) = create_dir_all(config_path.parent().unwrap()) {
-        eprintln!("Fehler beim Erstellen des Verzeichnisses: {}", e);
+        eprintln!("Failed to create directory: {}", e);
         return Err(ConfigError::CreateFileError);
     }
 
@@ -84,17 +85,17 @@ pub fn read_config_file(config_path: &PathBuf) -> Result<Root, ConfigError> {
 pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
     println!("It's looks like this is your first time using dayz-tool-cli!");
     println!("Let's create your first profile");
-    println!("Please enter a name for your profile");
+    println!("Please enter a name for your profile. (e.g. Your server's name)");
     let mut name = String::new();
     stdin().read_line(&mut name).unwrap();
     name = name.trim().to_string();
 
-    println!("Please enter the path to your DayZ server's working directory");
+    println!("Please enter the path to your DayZ server's working directory. (e.g. /home/user/DayZServer)");
     let mut workdir_path = String::new();
     stdin().read_line(&mut workdir_path).unwrap();
     workdir_path = workdir_path.trim().to_string();
 
-    println!("Please enter the path to your DayZ server's workshop directory");
+    println!("Please enter the path to your DayZ server's workshop directory. (e.g. /home/user/DayZServer/steamapps/workshop/content/221100)");
     let mut workshop_path = String::new();
     stdin().read_line(&mut workshop_path).unwrap();
     workshop_path = workshop_path.trim().to_string();

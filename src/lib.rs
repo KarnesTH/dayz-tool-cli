@@ -31,6 +31,18 @@ pub enum ConfigError {
     OpenFileError,
 }
 
+#[derive(Debug, Error, PartialEq)]
+pub enum DncError {
+    #[error("Invalid time format. Use 'h' for hours or 'min' for minutes")]
+    InvalidTimeFormat,
+    #[error("Invalid time value. The time value must be a number.")]
+    InvalidNumber,
+    #[error("serverTimeAcceleration must be between 0.1 and 64.0")]
+    InvalidTimeAcceleration,
+    #[error("serverNightTimeAcceleration must be between 0.1 and 64.0")]
+    InvalidNightTimeAcceleration,
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Root {
