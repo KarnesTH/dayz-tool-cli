@@ -30,7 +30,7 @@ A command-line tool for simplifying DayZ server administration.
 After installation, you can use the following commands:
 
 * **`dayz-tool-cli guid <steam64Id>`:** Generates a GUID from the given Steam64 ID.
-* **`dayz-tool-cli time`:** Displays the current time (day or night) on your DayZ server.
+* **`dayz-tool-cli dnc -d 8h -n 10min`:** Calculates and displays the `serverTimeAcceleration` and `serverNightTimeAcceleration` settings for a DayZ server, based on the desired day and night lengths..
 * **`dayz-tool-cli mod install <mod_name>`:** Installs the specified mod from your Steam Workshop directory to your server.
 * **(More commands to be added soon!)**
 
