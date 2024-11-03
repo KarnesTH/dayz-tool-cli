@@ -19,7 +19,6 @@ use std::path::PathBuf;
 ///
 /// let config_path = get_config_path();
 ///
-/// assert_eq!(config_path, PathBuf::from("/home/karnes/.dayz-tool/config.json"));
 /// ```
 pub fn get_config_path() -> PathBuf {
     let home_dir = match env::var("HOME") {
