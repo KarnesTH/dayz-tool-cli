@@ -1,7 +1,18 @@
 use clap::{Parser, Subcommand};
 use dayz_tool_cli::commands::{calculate_dnc, generate_guid};
-use dayz_tool_cli::utils::{create_initial_profile, get_config_path};
+use dayz_tool_cli::utils::{create_initial_profile, get_config_path, get_render_config};
 
+/// A command-line tool for simplifying DayZ server administration.
+///
+/// This tool provides commands for managing your DayZ server,
+/// including mod installation, GUID generation, and Day/Night cycle calculation.
+///
+/// To view available commands and their usage, use the `--help` flag.
+///
+/// Example:
+/// ```bash
+/// dayz-tool-cli --help
+/// ```
 #[derive(Parser)]
 #[command(author = "KarnesTH", version, about, long_about = None)]
 struct Cli {
@@ -24,7 +35,10 @@ enum Commands {
     /// ```bash
     /// dayz-tool-cli guid 76561198039479170
     /// ```
-    Guid { id: Option<String> },
+    Guid {
+        /// The Steam64 ID to generate the GUID from.
+        id: Option<String>,
+    },
 
     /// Converts hours and minutes into DayZ server settings for Day Night Cycle.
     ///
@@ -44,6 +58,7 @@ enum Commands {
 }
 
 fn main() {
+    inquire::set_global_render_config(get_render_config());
     let config_path = get_config_path();
 
     if !config_path.exists() {

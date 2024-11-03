@@ -1,8 +1,10 @@
 use crate::{ConfigError, Profile, Root};
+use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
+use inquire::Text;
 use serde_json::to_string_pretty;
 use std::env;
 use std::fs::{create_dir_all, File};
-use std::io::{stdin, Write};
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Returns the path to the configuration file.
@@ -85,20 +87,14 @@ pub fn read_config_file(config_path: &PathBuf) -> Result<Root, ConfigError> {
 pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
     println!("It's looks like this is your first time using dayz-tool-cli!");
     println!("Let's create your first profile");
-    println!("Please enter a name for your profile. (e.g. Your server's name)");
-    let mut name = String::new();
-    stdin().read_line(&mut name).unwrap();
-    name = name.trim().to_string();
+    let name = Text::new("Please enter a name.")
+        .with_help_message("Please enter a name for your profile. (e.g. Your server's name)")
+        .prompt()
+        .expect("Failed to get name");
 
-    println!("Please enter the path to your DayZ server's working directory. (e.g. /home/user/DayZServer)");
-    let mut workdir_path = String::new();
-    stdin().read_line(&mut workdir_path).unwrap();
-    workdir_path = workdir_path.trim().to_string();
+    let workdir_path = Text::new("What's your workdir path?").with_help_message("Please enter the path to your DayZ server's working directory. (e.g. /home/user/DayZServer)").prompt().expect("Failed to get workdir path");
 
-    println!("Please enter the path to your DayZ server's workshop directory. (e.g. /home/user/DayZServer/steamapps/workshop/content/221100)");
-    let mut workshop_path = String::new();
-    stdin().read_line(&mut workshop_path).unwrap();
-    workshop_path = workshop_path.trim().to_string();
+    let workshop_path = Text::new("What's your !Workshop path?").with_help_message("Please enter the path to your DayZ server's workshop directory. (e.g. /home/user/DayZServer/steamapps/workshop/content/221100)").prompt().expect("Failed to get workshop path");
 
     let profile = Profile {
         name,
@@ -110,4 +106,26 @@ pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> 
     add_profile(config_path, &profile)?;
 
     Ok(())
+}
+
+pub fn get_render_config() -> RenderConfig<'static> {
+    let mut render_config = RenderConfig::default();
+    render_config.prompt_prefix = Styled::new(">").with_fg(Color::DarkCyan);
+    render_config.highlighted_option_prefix = Styled::new("->").with_fg(Color::LightBlue);
+    render_config.selected_checkbox = Styled::new("[X]").with_fg(Color::LightGreen);
+    render_config.scroll_up_prefix = Styled::new("⇞");
+    render_config.scroll_down_prefix = Styled::new("⇟");
+    render_config.unselected_checkbox = Styled::new("[ ]");
+
+    render_config.error_message = render_config
+        .error_message
+        .with_prefix(Styled::new("❌").with_fg(Color::LightRed));
+
+    render_config.answer = StyleSheet::new()
+        .with_attr(Attributes::ITALIC)
+        .with_fg(Color::LightBlue);
+
+    render_config.help_message = StyleSheet::new().with_fg(Color::DarkCyan);
+
+    render_config
 }
