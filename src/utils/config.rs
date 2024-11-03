@@ -32,7 +32,7 @@ pub fn get_config_path() -> PathBuf {
         },
     };
 
-    let mut config_path = PathBuf::from(home_dir);
+    let mut config_path = home_dir;
     config_path.push(".dayz-tool");
     config_path.push("config.json");
 
@@ -63,7 +63,7 @@ pub fn add_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), Confi
         Err(_) => return Err(ConfigError::CreateFileError),
     };
 
-    if let Err(_) = config_file.write_all(json.as_bytes()) {
+    if config_file.write_all(json.as_bytes()).is_err() {
         return Err(ConfigError::WriteFileError);
     }
 

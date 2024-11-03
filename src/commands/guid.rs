@@ -40,7 +40,7 @@ pub fn generate_guid(id: &str) -> String {
             hasher.update(validated_id);
             let hash_result = hasher.finalize();
 
-            let hash_to_base64 = general_purpose::URL_SAFE.encode(&hash_result);
+            let hash_to_base64 = general_purpose::URL_SAFE.encode(hash_result);
 
             let base64_regex = Regex::new(r"/").unwrap();
             let guid = base64_regex.replace_all(&hash_to_base64, "_");
@@ -74,9 +74,9 @@ pub fn generate_guid(id: &str) -> String {
 fn validate_id(id: &str) -> Result<String> {
     if id.len() != 17 {
         return Err(GuidError::InvalidLength);
-    } else if id.starts_with("7656119") == false {
+    } else if !id.starts_with("7656119") {
         return Err(GuidError::InvalidPrefix);
-    } else if id.chars().all(|c| c.is_digit(10)) == false {
+    } else if !id.chars().all(|c| c.is_ascii_digit()) {
         return Err(GuidError::InvalidCharacters);
     }
 

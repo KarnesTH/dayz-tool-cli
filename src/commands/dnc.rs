@@ -79,11 +79,11 @@ fn validate_dnc(
     time_acceleration: f32,
     night_time_acceleration: f32,
 ) -> Result<(f32, f32), DncError> {
-    if time_acceleration < 0.1 || time_acceleration > 64.0 {
+    if !(0.1..=64.0).contains(&time_acceleration) {
         return Err(DncError::InvalidTimeAcceleration);
     }
 
-    if night_time_acceleration < 0.1 || night_time_acceleration > 64.0 {
+    if !(0.1..=64.0).contains(&night_time_acceleration) {
         return Err(DncError::InvalidNightTimeAcceleration);
     }
 
