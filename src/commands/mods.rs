@@ -7,6 +7,12 @@ use std::{
 
 use crate::{utils::add_mods_to_profile, ModError, Profile};
 
+/// Installs selected mods from the workshop directory to the profile's work directory.
+///
+/// This function prompts the user to select mods from the workshop directory and then
+/// copies the selected mods to the profile's work directory. It also updates the profile
+/// with the installed mods and returns a startup parameter string for launching the game
+/// with the installed mods.
 pub fn install_mods(profile: Profile) -> Result<String, ModError> {
     let workshop_path = profile.workshop_path.clone();
     let path = Path::new(&workshop_path);
@@ -61,12 +67,24 @@ pub fn install_mods(profile: Profile) -> Result<String, ModError> {
     Ok(startup_parameter)
 }
 
+/// Retrieves the list of installed mods from the given profile.
+///
+/// This function takes a `Profile` as input and returns a list of installed mods
+/// associated with that profile. If the operation is successful, it returns a `Vec<Value>`
+/// containing the installed mods. If an error occurs, a `ModError` is returned.
 pub fn installed_mod_list(profile: Profile) -> Result<Vec<Value>, ModError> {
     let installed_mods = profile.installed_mods;
 
     Ok(installed_mods)
 }
 
+/// Recursively copies the contents of one directory to another.
+///
+/// This function takes a source directory and a target directory as input and
+/// recursively copies all files and subdirectories from the source to the target.
+/// If the target directory does not exist, it will be created. If any error occurs
+/// during the creation of the target directory or the copying of files, an appropriate
+/// `ModError` will be returned.
 fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
     match create_dir_all(target_dir) {
         Ok(dir) => dir,
@@ -93,4 +111,63 @@ fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::fs::{self, File};
+    use std::io::Write;
+
+    #[test]
+    fn test_installed_mod_list() {
+        let mod1 = json!("@mod1");
+        let mod2 = json!("@mod2");
+        let mod3 = json!("@mod3");
+        let installed_mods = vec![mod1.clone(), mod2.clone(), mod3.clone()];
+        let profile = Profile {
+            name: String::from("DayZTestServer"),
+            workdir_path: String::from("/home/karnes/Servers/DayZTestServer"),
+            workshop_path: String::from("/home/karnes/Servers/!Workshop"),
+            installed_mods: installed_mods.clone(),
+            is_active: true,
+        };
+
+        match installed_mod_list(profile) {
+            Ok(mods) => {
+                assert_eq!(mods, installed_mods);
+            }
+            Err(e) => panic!("Error retrieving installed mods: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_copy_dir() {
+        let temp_dir = std::env::temp_dir();
+        let source_dir = temp_dir.join("source_dir");
+        let target_dir = temp_dir.join("target_dir");
+
+        fs::create_dir_all(&source_dir).unwrap();
+        let mut file1 = File::create(source_dir.join("file1.txt")).unwrap();
+        writeln!(file1, "This is a test file.").unwrap();
+
+        let sub_dir = source_dir.join("sub_dir");
+        fs::create_dir_all(&sub_dir).unwrap();
+        let mut file2 = File::create(sub_dir.join("file2.txt")).unwrap();
+        writeln!(file2, "This is another test file.").unwrap();
+
+        match copy_dir(&source_dir, &target_dir) {
+            Ok(_) => {
+                assert!(target_dir.exists());
+                assert!(target_dir.join("file1.txt").exists());
+                assert!(target_dir.join("sub_dir").exists());
+                assert!(target_dir.join("sub_dir/file2.txt").exists());
+            }
+            Err(e) => panic!("Error copying directory: {:?}", e),
+        }
+
+        fs::remove_dir_all(&source_dir).unwrap();
+        fs::remove_dir_all(&target_dir).unwrap();
+    }
 }

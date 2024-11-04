@@ -18,7 +18,6 @@ use std::path::PathBuf;
 /// use dayz_tool_cli::utils::get_config_path;
 ///
 /// let config_path = get_config_path();
-///
 /// ```
 pub fn get_config_path() -> PathBuf {
     let home_dir = match env::var("HOME") {
@@ -38,6 +37,20 @@ pub fn get_config_path() -> PathBuf {
     config_path
 }
 
+/// Retrieves the active profile from the configuration file.
+///
+/// This function reads the configuration file from the given path and returns the active profile.
+/// If the configuration file cannot be read or parsed, or if no active profile is found, an appropriate
+/// `ConfigError` is returned.
+///
+/// # Example
+///
+/// ```rust
+/// use std::path::PathBuf;
+/// use dayz_tool_cli::utils::{get_profile, get_config_path};
+///
+/// let profile = get_profile(&get_config_path());
+/// ```
 pub fn get_profile(config_path: &PathBuf) -> Result<Profile, ConfigError> {
     let config = read_config_file(config_path)?;
 
@@ -47,6 +60,11 @@ pub fn get_profile(config_path: &PathBuf) -> Result<Profile, ConfigError> {
     Ok(active_profile.unwrap().clone())
 }
 
+/// Adds a new profile to the configuration file.
+///
+/// This function takes a path to the configuration file and a `Profile` object, and adds the profile
+/// to the configuration file. If the configuration file does not exist, it will be created. If any error
+/// occurs during the process, an appropriate `ConfigError` is returned.
 pub fn add_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), ConfigError> {
     let mut config = if config_path.exists() {
         match read_config_file(config_path) {
@@ -78,6 +96,10 @@ pub fn add_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), Confi
     Ok(())
 }
 
+/// Reads the configuration file and returns the parsed configuration.
+///
+/// This function takes a path to the configuration file, reads its contents, and parses it into a `Root` object.
+/// If the configuration file cannot be opened or parsed, an appropriate `ConfigError` is returned.
 pub fn read_config_file(config_path: &PathBuf) -> Result<Root, ConfigError> {
     let config_file = match File::open(config_path) {
         Ok(file) => file,
@@ -92,6 +114,12 @@ pub fn read_config_file(config_path: &PathBuf) -> Result<Root, ConfigError> {
     Ok(config)
 }
 
+/// Creates an initial profile by prompting the user for profile details.
+///
+/// This function guides the user through the process of creating their first profile by prompting
+/// for the profile name, work directory path, and workshop path. The created profile is then added
+/// to the configuration file. If any error occurs during the process, an appropriate `ConfigError`
+/// is returned.
 pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
     println!("It's looks like this is your first time using dayz-tool-cli!");
     println!("Let's create your first profile");
@@ -117,6 +145,11 @@ pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> 
     Ok(())
 }
 
+/// Adds a list of mods to the active profile in the configuration file.
+///
+/// This function takes a list of mod names, reads the configuration file, and adds the mods
+/// to the active profile's list of installed mods. If any error occurs during the process,
+/// an appropriate `ConfigError` is returned.
 pub fn add_mods_to_profile(mods: Vec<String>) -> Result<(), ConfigError> {
     let config_path = get_config_path();
 
@@ -143,6 +176,11 @@ pub fn add_mods_to_profile(mods: Vec<String>) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Returns a customized render configuration for prompts.
+///
+/// This function creates and returns a `RenderConfig` object with customized styles for
+/// various elements of the prompt, such as the prompt prefix, highlighted option prefix,
+/// selected and unselected checkboxes, scroll prefixes, error messages, answers, and help messages.
 pub fn get_render_config() -> RenderConfig<'static> {
     let mut render_config = RenderConfig::default();
     render_config.prompt_prefix = Styled::new(">").with_fg(Color::DarkCyan);

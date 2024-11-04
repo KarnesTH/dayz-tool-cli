@@ -38,7 +38,7 @@ After installation, you can use the following commands:
 ---
 title: dayz-tools-cli
 ---
-flowchart LR
+flowchart TD
     A[Start] --> B{'.dayz-tool' Ordner existiert?}
     B -- Ja --> C{Config.json existiert?}
     C -- Ja --> D{CLI im Hauptmenü}
