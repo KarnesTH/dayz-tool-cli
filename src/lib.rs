@@ -29,6 +29,8 @@ pub enum ConfigError {
     ParseError,
     #[error("Failed to find the configuration file")]
     OpenFileError,
+    #[error("No active profile found")]
+    NoActiveProfile,
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -56,4 +58,5 @@ pub struct Profile {
     pub workdir_path: String,
     pub workshop_path: String,
     pub installed_mods: Vec<Value>,
+    pub is_active: bool,
 }

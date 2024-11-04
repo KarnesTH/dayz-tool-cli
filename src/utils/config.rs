@@ -38,6 +38,15 @@ pub fn get_config_path() -> PathBuf {
     config_path
 }
 
+pub fn get_profile(config_path: &PathBuf) -> Result<Profile, ConfigError> {
+    let config = read_config_file(config_path)?;
+
+    let profiles = config.profiles;
+    let active_profile = profiles.iter().find(|profile| profile.is_active);
+
+    Ok(active_profile.unwrap().clone())
+}
+
 pub fn add_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), ConfigError> {
     let mut config = if config_path.exists() {
         match read_config_file(config_path) {
@@ -100,6 +109,7 @@ pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> 
         workdir_path,
         workshop_path,
         installed_mods: vec![],
+        is_active: true,
     };
 
     add_profile(config_path, &profile)?;

@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
-use dayz_tool_cli::commands::{calculate_dnc, generate_guid};
-use dayz_tool_cli::utils::{create_initial_profile, get_config_path, get_render_config};
+use dayz_tool_cli::commands::{calculate_dnc, generate_guid, install_mods};
+use dayz_tool_cli::utils::{
+    create_initial_profile, get_config_path, get_profile, get_render_config,
+};
 
 /// A command-line tool for simplifying DayZ server administration.
 ///
@@ -55,11 +57,72 @@ enum Commands {
         #[arg(short = 'n', long)]
         night: Option<String>,
     },
+
+    /// Manages mods for the DayZ server.
+    ///
+    /// This command provides subcommands for installing, uninstalling, listing, and updating mods.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli mod <subcommand>
+    /// ```
+    Mods {
+        #[command(subcommand)]
+        subcommands: ModCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ModCommands {
+    /// Installs selected mods from the Workshop directory.
+    ///
+    /// Please ensure that your Workshop directory is correctly configured in the profile settings.
+    /// Mods must be subscribed to on the Steam Workshop.
+    /// (e.g. when using the standalone dayz launcher you can find the !Workshop folder under: path/to/steam/steamapps/common/DayZ/!Workshop)
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli mod install
+    /// ```
+    Install,
+
+    /// Uninstalls a mod from the server.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli mod uninstall <modName>
+    /// ```
+    Uninstall {
+        /// The name of the mod to uninstall.
+        mod_name: String,
+    },
+
+    /// Lists all installed mods.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli mod list
+    /// ```
+    List,
+
+    /// Updates all installed mods.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli mod update
+    /// ```
+    Update,
 }
 
 fn main() {
     inquire::set_global_render_config(get_render_config());
     let config_path = get_config_path();
+    let profile = get_profile(&config_path);
 
     if !config_path.exists() {
         match create_initial_profile(&config_path) {
@@ -89,6 +152,26 @@ fn main() {
                     println!("Bitte geben Sie sowohl die Tag- als auch die Nachtlänge an.");
                 }
             }
+            Commands::Mods { subcommands } => match subcommands {
+                ModCommands::Install => match profile {
+                    Ok(profile) => match install_mods(profile) {
+                        Ok(mods) => {
+                            println!("Please add this: '{}' to your startup parameters", mods)
+                        }
+                        Err(_) => println!("Failed to install mods"),
+                    },
+                    Err(_) => println!("No profile found"),
+                },
+                ModCommands::Uninstall { mod_name } => {
+                    println!("Uninstalling mod: {}", mod_name);
+                }
+                ModCommands::List => {
+                    println!("Listing mods...");
+                }
+                ModCommands::Update => {
+                    println!("Updating mods...");
+                }
+            },
         }
     }
 }
