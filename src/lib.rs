@@ -31,6 +31,10 @@ pub enum ConfigError {
     OpenFileError,
     #[error("No active profile found")]
     NoActiveProfile,
+    #[error("Failed to find the profile")]
+    ProfileNotFoundError,
+    #[error("Failed to serialize the value")]
+    SerializeError,
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -43,6 +47,24 @@ pub enum DncError {
     InvalidTimeAcceleration,
     #[error("serverNightTimeAcceleration must be between 0.1 and 64.0")]
     InvalidNightTimeAcceleration,
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum ModError {
+    #[error("Failed to find the mod")]
+    NotFound,
+    #[error("Failed to install the mod")]
+    InstallError,
+    #[error("Failed to uninstall the mod")]
+    UninstallError,
+    #[error("Failed to update the mod")]
+    UpdateError,
+    #[error("Failed to select mods")]
+    SelectError,
+    #[error("Failed to create destination folder")]
+    CreateDirError,
+    #[error("Failed to copy file")]
+    CopyFileError,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

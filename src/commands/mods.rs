@@ -1,12 +1,13 @@
 use inquire::MultiSelect;
+use serde_json::Value;
 use std::{
     fs::{copy, create_dir_all},
     path::{Path, PathBuf},
 };
 
-use crate::Profile;
+use crate::{utils::add_mods_to_profile, ModError, Profile};
 
-pub fn install_mods(profile: Profile) -> Result<String, String> {
+pub fn install_mods(profile: Profile) -> Result<String, ModError> {
     let workshop_path = profile.workshop_path.clone();
     let path = Path::new(&workshop_path);
 
@@ -45,11 +46,13 @@ pub fn install_mods(profile: Profile) -> Result<String, String> {
                 let source_path = PathBuf::from(selected_mod_path);
                 let workdir_path = profile.workdir_path.clone();
                 let target_path = Path::new(&workdir_path).join(source_path.file_name().unwrap());
-                copy_dir(&source_path, &target_path);
+                copy_dir(&source_path, &target_path)?;
             }
+
+            add_mods_to_profile(mods_to_install.clone()).unwrap();
         }
-        Err(err) => {
-            return Err(format!("Failed to select mods: {}", err));
+        Err(_) => {
+            return Err(ModError::SelectError);
         }
     }
 
@@ -58,24 +61,36 @@ pub fn install_mods(profile: Profile) -> Result<String, String> {
     Ok(startup_parameter)
 }
 
-fn copy_dir(source_dir: &Path, target_dir: &Path) {
-    create_dir_all(target_dir).unwrap_or_else(|error| {
-        panic!("Fehler beim Erstellen des Zielordners: {}", error);
-    });
+pub fn installed_mod_list(profile: Profile) -> Result<Vec<Value>, ModError> {
+    let installed_mods = profile.installed_mods;
 
-    for entry in source_dir.read_dir().unwrap_or_else(|error| {
-        panic!("Fehler beim Lesen des Quellordners: {}", error);
-    }) {
+    Ok(installed_mods)
+}
+
+fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
+    match create_dir_all(target_dir) {
+        Ok(dir) => dir,
+        Err(_) => {
+            return Err(ModError::CreateDirError);
+        }
+    }
+
+    for entry in source_dir.read_dir().unwrap() {
         let entry = entry.unwrap();
         let source_path = entry.path();
         let target_path = target_dir.join(source_path.strip_prefix(source_dir).unwrap());
 
         if entry.file_type().unwrap().is_dir() {
-            copy_dir(&source_path, &target_path);
+            copy_dir(&source_path, &target_path)?;
         } else {
-            copy(&source_path, &target_path).unwrap_or_else(|error| {
-                panic!("Fehler beim Kopieren der Datei: {}", error);
-            });
+            match copy(&source_path, &target_path) {
+                Ok(_) => {}
+                Err(_) => {
+                    return Err(ModError::CopyFileError);
+                }
+            }
         }
     }
+
+    Ok(())
 }

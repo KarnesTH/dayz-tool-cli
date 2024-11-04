@@ -1,7 +1,7 @@
 use crate::{ConfigError, Profile, Root};
 use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
 use inquire::Text;
-use serde_json::to_string_pretty;
+use serde_json::{to_string_pretty, Value};
 use std::env;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
@@ -102,7 +102,7 @@ pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> 
 
     let workdir_path = Text::new("What's your workdir path?").with_help_message("Please enter the path to your DayZ server's working directory. (e.g. /home/user/DayZServer)").prompt().expect("Failed to get workdir path");
 
-    let workshop_path = Text::new("What's your !Workshop path?").with_help_message("Please enter the path to your DayZ server's workshop directory. (e.g. /home/user/DayZServer/steamapps/workshop/content/221100)").prompt().expect("Failed to get workshop path");
+    let workshop_path = Text::new("What's your !Workshop path?").with_help_message("Please enter the path to your DayZ server's workshop directory. (e.g. for the DayZ Standalone Launcher /path/to/steam/steamapps/common/DayZ/!Workshop)").prompt().expect("Failed to get workshop path");
 
     let profile = Profile {
         name,
@@ -113,6 +113,32 @@ pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> 
     };
 
     add_profile(config_path, &profile)?;
+
+    Ok(())
+}
+
+pub fn add_mods_to_profile(mods: Vec<String>) -> Result<(), ConfigError> {
+    let config_path = get_config_path();
+
+    let mut config = read_config_file(&config_path)?;
+
+    let active_profile = config
+        .profiles
+        .iter_mut()
+        .find(|p| p.is_active)
+        .ok_or(ConfigError::NoActiveProfile)?;
+
+    let mods_as_values: Vec<Value> = mods.into_iter().map(Value::String).collect();
+
+    active_profile.installed_mods.extend(mods_as_values);
+
+    let json = to_string_pretty(&config).map_err(|_| ConfigError::SerializeError)?;
+
+    let mut config_file = File::create(&config_path).map_err(|_| ConfigError::CreateFileError)?;
+
+    config_file
+        .write_all(json.as_bytes())
+        .map_err(|_| ConfigError::WriteFileError)?;
 
     Ok(())
 }

@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use dayz_tool_cli::commands::{calculate_dnc, generate_guid, install_mods};
+use dayz_tool_cli::commands::{calculate_dnc, generate_guid, install_mods, installed_mod_list};
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config,
 };
@@ -156,7 +156,7 @@ fn main() {
                 ModCommands::Install => match profile {
                     Ok(profile) => match install_mods(profile) {
                         Ok(mods) => {
-                            println!("Please add this: '{}' to your startup parameters", mods)
+                            println!("Please add this: {} to your startup parameters", mods)
                         }
                         Err(_) => println!("Failed to install mods"),
                     },
@@ -165,9 +165,18 @@ fn main() {
                 ModCommands::Uninstall { mod_name } => {
                     println!("Uninstalling mod: {}", mod_name);
                 }
-                ModCommands::List => {
-                    println!("Listing mods...");
-                }
+                ModCommands::List => match profile {
+                    Ok(profile) => match installed_mod_list(profile) {
+                        Ok(mods) => {
+                            println!("Installed mods:");
+                            for installed_mod in mods {
+                                println!("{}", installed_mod);
+                            }
+                        }
+                        Err(_) => println!("No mods found"),
+                    },
+                    Err(_) => println!("No profile found"),
+                },
                 ModCommands::Update => {
                     println!("Updating mods...");
                 }
