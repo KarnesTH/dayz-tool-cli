@@ -3,6 +3,7 @@ use dayz_tool_cli::commands::{calculate_dnc, generate_guid, install_mods, instal
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config,
 };
+use dayz_tool_cli::THREAD_POOL;
 
 /// A command-line tool for simplifying DayZ server administration.
 ///
@@ -154,12 +155,14 @@ fn main() {
             }
             Commands::Mods { subcommands } => match subcommands {
                 ModCommands::Install => match profile {
-                    Ok(profile) => match install_mods(profile) {
-                        Ok(mods) => {
-                            println!("Please add this: {} to your startup parameters", mods)
-                        }
-                        Err(_) => println!("Failed to install mods"),
-                    },
+                    Ok(profile) => {
+                        match install_mods(&THREAD_POOL, profile) {
+                            Ok(mods) => {
+                                println!("Please add this: {} to your startup parameters", mods)
+                            }
+                            Err(_) => println!("Failed to install mods"),
+                        };
+                    }
                     Err(_) => println!("No profile found"),
                 },
                 ModCommands::Uninstall { mod_name } => {

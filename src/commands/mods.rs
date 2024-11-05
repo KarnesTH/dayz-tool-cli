@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{utils::add_mods_to_profile, ModError, Profile};
+use crate::{utils::add_mods_to_profile, ModError, Profile, ThreadPool};
 
 /// Installs selected mods from the workshop directory to the profile's work directory.
 ///
@@ -13,7 +13,7 @@ use crate::{utils::add_mods_to_profile, ModError, Profile};
 /// copies the selected mods to the profile's work directory. It also updates the profile
 /// with the installed mods and returns a startup parameter string for launching the game
 /// with the installed mods.
-pub fn install_mods(profile: Profile) -> Result<String, ModError> {
+pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModError> {
     let workshop_path = profile.workshop_path.clone();
     let path = Path::new(&workshop_path);
 
@@ -52,7 +52,25 @@ pub fn install_mods(profile: Profile) -> Result<String, ModError> {
                 let source_path = PathBuf::from(selected_mod_path);
                 let workdir_path = profile.workdir_path.clone();
                 let target_path = Path::new(&workdir_path).join(source_path.file_name().unwrap());
-                copy_dir(&source_path, &target_path)?;
+                pool.execute({
+                    let source_path = source_path.clone();
+                    let target_path = target_path.clone();
+                    move || {
+                        copy_dir(&source_path, &target_path).unwrap();
+                    }
+                });
+
+                if let Some(key_source_path) = find_keys_folder(&source_path) {
+                    let key_target_path = Path::new(&workdir_path).join("keys");
+                    pool.execute({
+                        let key_source_path = key_source_path.clone();
+                        let key_target_path = key_target_path.clone();
+                        move || {
+                            copy_keys(&key_source_path, &key_target_path).unwrap();
+                        }
+                    });
+                }
+                // TODO: Add copy types.xml to mpmissions folder
             }
 
             add_mods_to_profile(mods_to_install.clone()).unwrap();
@@ -110,6 +128,36 @@ fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
         }
     }
 
+    Ok(())
+}
+
+fn find_keys_folder(mod_path: &Path) -> Option<PathBuf> {
+    for entry in mod_path.read_dir().unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_dir() {
+            let folder_name = entry.file_name().to_string_lossy().to_lowercase();
+            if folder_name == "keys" {
+                return Some(entry.path());
+            }
+        }
+    }
+    None
+}
+
+fn copy_keys(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
+    for entry in source_dir.read_dir().unwrap() {
+        let entry = entry.unwrap();
+        let source_path = entry.path();
+        if source_path.extension().and_then(|s| s.to_str()) == Some("bikey") {
+            let target_path = target_dir.join(source_path.file_name().unwrap());
+            match copy(&source_path, &target_path) {
+                Ok(_) => {}
+                Err(_) => {
+                    return Err(ModError::CopyFileError);
+                }
+            }
+        }
+    }
     Ok(())
 }
 

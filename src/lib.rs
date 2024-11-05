@@ -1,3 +1,10 @@
+use std::{
+    sync::{mpsc, Arc, Mutex},
+    thread,
+};
+
+use lazy_static::lazy_static;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -81,4 +88,81 @@ pub struct Profile {
     pub workshop_path: String,
     pub installed_mods: Vec<Value>,
     pub is_active: bool,
+}
+
+lazy_static! {
+    pub static ref THREAD_POOL: ThreadPool = ThreadPool::new(num_cpus::get());
+}
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Box<dyn FnOnce() + Send>>,
+}
+
+type Job = Box<dyn FnOnce() + Send>;
+type Receiver = Arc<Mutex<mpsc::Receiver<Job>>>;
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+
+        let (sender, receiver) = mpsc::channel();
+
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(size);
+
+        for _ in 0..size {
+            workers.push(Worker::new(receiver.clone()));
+        }
+
+        ThreadPool { workers, sender }
+    }
+
+    pub fn execute<F>(&self, task: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let task = Box::new(task);
+        self.sender.send(task).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        for _ in &self.workers {
+            self.sender.send(Box::new(|| {})).unwrap();
+        }
+
+        for worker in &mut self.workers {
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+
+struct Worker {
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl Worker {
+    fn new(receiver: Receiver) -> Worker {
+        let thread = thread::spawn(move || loop {
+            let task = receiver.lock().unwrap().recv();
+
+            match task {
+                Ok(task) => {
+                    task();
+                }
+                Err(_) => {
+                    break;
+                }
+            }
+        });
+
+        Worker {
+            thread: Some(thread),
+        }
+    }
 }
