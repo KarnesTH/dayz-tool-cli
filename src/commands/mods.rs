@@ -10,10 +10,10 @@ use crate::{
     ModError, Profile, ThreadPool,
 };
 
-/// Installs selected mods from the workshop directory to the profile's work directory.
+/// Installs selected mods from the workshop directory to the workdir directory.
 ///
-/// This function prompts the user to select mods from the workshop directory and then
-/// copies the selected mods to the profile's work directory. It also updates the profile
+/// This function prompts the user to select filtered, not installed mods from the workshop directory and then
+/// copies the selected mods to the workdir directory. It also updates the profile
 /// with the installed mods and returns a startup parameter string for launching the game
 /// with the installed mods.
 pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModError> {
@@ -24,14 +24,22 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
     let mut mods_paths: Vec<String> = vec![];
     let mut mods_to_install: Vec<String> = vec![];
 
+    let installed_mods = installed_mod_list(profile.clone()).unwrap();
+    let installed_mods_names: Vec<String> = installed_mods
+        .into_iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+
     for entry in path.read_dir().unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
         let path_str = path.to_str().unwrap();
         let folder_name = path.file_name().unwrap().to_str().unwrap();
 
-        mods.push(folder_name.to_string());
-        mods_paths.push(path_str.to_string());
+        if !installed_mods_names.contains(&folder_name.to_string()) {
+            mods.push(folder_name.to_string());
+            mods_paths.push(path_str.to_string());
+        }
     }
 
     let ans = MultiSelect::new("Select the mods to intsall:", mods.clone()).prompt();
