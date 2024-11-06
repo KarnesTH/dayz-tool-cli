@@ -72,6 +72,8 @@ pub enum ModError {
     CreateDirError,
     #[error("Failed to copy file")]
     CopyFileError,
+    #[error("Failed to parse startup parameter")]
+    ParseError,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

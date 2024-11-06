@@ -5,7 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{utils::add_mods_to_profile, ModError, Profile, ThreadPool};
+use crate::{
+    utils::{add_mods_to_profile, get_config_path, get_profile},
+    ModError, Profile, ThreadPool,
+};
 
 /// Installs selected mods from the workshop directory to the profile's work directory.
 ///
@@ -80,9 +83,10 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
         }
     }
 
-    let startup_parameter = format!("\"-mod={};\"", mods_to_install.join(";"));
-
-    Ok(startup_parameter)
+    match parse_startup_parameter() {
+        Ok(startup_parameter) => Ok(startup_parameter),
+        Err(_) => Err(ModError::ParseError),
+    }
 }
 
 /// Retrieves the list of installed mods from the given profile.
@@ -131,6 +135,11 @@ fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
     Ok(())
 }
 
+/// Searches for a subdirectory named "keys" in the specified mod directory.
+///
+/// This function searches the given directory for a subdirectory named "keys"
+/// (case-insensitive). If such a directory is found, the path to this directory
+/// is returned. Otherwise, `None` is returned.
 fn find_keys_folder(mod_path: &Path) -> Option<PathBuf> {
     for entry in mod_path.read_dir().unwrap() {
         let entry = entry.unwrap();
@@ -144,6 +153,11 @@ fn find_keys_folder(mod_path: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Copies all ".bikey" files from the source directory to the target directory.
+///
+/// This function iterates through the entries in the specified source directory,
+/// and copies all files with the ".bikey" extension to the target directory. If
+/// any file copy operation fails, it returns a `ModError::CopyFileError`.
 fn copy_keys(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
     for entry in source_dir.read_dir().unwrap() {
         let entry = entry.unwrap();
@@ -159,6 +173,23 @@ fn copy_keys(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
         }
     }
     Ok(())
+}
+
+/// Generates a startup parameter string for the installed mods.
+///
+/// This function retrieves the configuration path and profile, then generates a list
+/// of installed mods. It formats these mods into a startup parameter string suitable
+fn parse_startup_parameter() -> Result<String, ModError> {
+    let config = get_config_path();
+    let updatet_profile = get_profile(&config).unwrap();
+
+    let installed_mods = installed_mod_list(updatet_profile).unwrap();
+    let installed_mods_strings: Vec<String> = installed_mods
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    let startup_parameter = format!("\"-mod={};\"", installed_mods_strings.join(";"));
+    Ok(startup_parameter)
 }
 
 #[cfg(test)]
