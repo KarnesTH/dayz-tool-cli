@@ -1,13 +1,15 @@
 use inquire::MultiSelect;
+use regex::Regex;
 use serde_json::Value;
 use std::{
-    fs::{copy, create_dir_all},
+    fs::{copy, create_dir_all, File},
+    io::Read,
     path::{Path, PathBuf},
 };
 
 use crate::{
     utils::{add_mods_to_profile, get_config_path, get_profile},
-    ModError, Profile, ThreadPool,
+    Mod, ModError, Profile, ThreadPool,
 };
 
 /// Installs selected mods from the workshop directory to the workdir directory.
@@ -18,6 +20,7 @@ use crate::{
 /// with the installed mods.
 pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModError> {
     let workshop_path = profile.workshop_path.clone();
+    let workdir_path = profile.workdir_path.clone();
     let path = Path::new(&workshop_path);
 
     let mut mods: Vec<String> = vec![];
@@ -81,7 +84,12 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
                         }
                     });
                 }
-                // TODO: Add copy types.xml to mpmissions folder
+
+                if let Some(types_source_path) = find_types_xml(&source_path) {
+                    println!("{}", types_source_path.display());
+                } else {
+                    println!("No types found. Please look up on the Steam Workshop page of the mod for more information.");
+                }
             }
 
             add_mods_to_profile(mods_to_install.clone()).unwrap();
@@ -172,10 +180,12 @@ fn copy_keys(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
         let source_path = entry.path();
         if source_path.extension().and_then(|s| s.to_str()) == Some("bikey") {
             let target_path = target_dir.join(source_path.file_name().unwrap());
-            match copy(&source_path, &target_path) {
-                Ok(_) => {}
-                Err(_) => {
-                    return Err(ModError::CopyFileError);
+            if !target_path.exists() {
+                match copy(&source_path, &target_path) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        return Err(ModError::CopyFileError);
+                    }
                 }
             }
         }
@@ -198,6 +208,57 @@ fn parse_startup_parameter() -> Result<String, ModError> {
         .collect();
     let startup_parameter = format!("\"-mod={};\"", installed_mods_strings.join(";"));
     Ok(startup_parameter)
+}
+
+fn find_types_xml(mod_path: &Path) -> Option<PathBuf> {
+    let re_types_xml = Regex::new(r"types\.xml").unwrap();
+    for entry in mod_path.read_dir().unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+
+        if path.is_file() {
+            let file_name = path.file_name().unwrap().to_string_lossy().to_lowercase();
+            if re_types_xml.is_match(&file_name) {
+                return Some(path);
+            }
+        } else if path.is_dir() {
+            if let Some(types_xml) = find_types_xml(&path) {
+                return Some(types_xml);
+            }
+        }
+    }
+    None
+}
+
+fn get_map_name(workdir: &str) -> Option<String> {
+    let cfg_path = Path::new(workdir).join("serverDZ.cfg");
+
+    let mut file = File::open(cfg_path).ok()?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).ok()?;
+
+    let re = Regex::new(r"(\w+.\w+)").unwrap();
+
+    if let Some(cap) = re.captures(&contents) {
+        return Some(cap[1].to_string());
+    } else {
+        None
+    }
+}
+
+fn write_new_files(source_path: &Path, workdir: String) -> Result<(), ModError> {
+    let map_name = get_map_name(&workdir).unwrap();
+
+    let target_path = Path::new(&workdir).join("mpmissions").join(&map_name);
+
+    let mod_name = source_path.file_name().unwrap().to_string_lossy();
+    let mods = Mod {
+        name: mod_name.to_string(),
+    };
+
+    let mod_short_name = mods.short_name();
+
+    Ok(())
 }
 
 #[cfg(test)]

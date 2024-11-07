@@ -171,9 +171,13 @@ fn main() {
                 ModCommands::List => match profile {
                     Ok(profile) => match installed_mod_list(profile) {
                         Ok(mods) => {
-                            println!("Installed mods:");
-                            for installed_mod in mods {
-                                println!("{}", installed_mod);
+                            if mods.is_empty() {
+                                println!("No mods installed");
+                            } else {
+                                println!("Installed mods:");
+                                for installed_mod in mods {
+                                    println!("{}", installed_mod);
+                                }
                             }
                         }
                         Err(_) => println!("No mods found"),

@@ -168,3 +168,18 @@ impl Worker {
         }
     }
 }
+
+pub struct Mod {
+    name: String,
+}
+
+impl Mod {
+    pub fn short_name(&self) -> String {
+        let mut short_name = String::new();
+        let parts = self.name.split(|c| c == ' ' || c == '-' || c == '_');
+        for part in parts {
+            short_name.push_str(&part.chars().take(3).collect::<String>());
+        }
+        short_name
+    }
+}
