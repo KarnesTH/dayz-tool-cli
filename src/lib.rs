@@ -74,6 +74,8 @@ pub enum ModError {
     CopyFileError,
     #[error("Failed to parse startup parameter")]
     ParseError,
+    #[error("Failed to find the path")]
+    PathError,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -182,4 +184,139 @@ impl Mod {
         }
         short_name
     }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Type {
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "nominal")]
+    pub nominal: i32,
+    #[serde(rename = "lifetime")]
+    pub lifetime: i32,
+    #[serde(rename = "restock")]
+    pub restock: i32,
+    #[serde(rename = "min")]
+    pub min: i32,
+    #[serde(rename = "quantmin")]
+    pub quantmin: i32,
+    #[serde(rename = "quantmax")]
+    pub quantmax: i32,
+    #[serde(rename = "cost")]
+    pub cost: i32,
+    #[serde(rename = "flags")]
+    pub flags: Flags,
+    #[serde(rename = "category")]
+    pub category: Category,
+    #[serde(rename = "usage")]
+    pub usage: Option<Vec<String>>,
+    #[serde(rename = "tag")]
+    pub tag: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Flags {
+    #[serde(rename = "count_in_cargo")]
+    pub count_in_cargo: i32,
+    #[serde(rename = "count_in_hoarder")]
+    pub count_in_hoarder: i32,
+    #[serde(rename = "count_in_map")]
+    pub count_in_map: i32,
+    #[serde(rename = "count_in_player")]
+    pub count_in_player: i32,
+    #[serde(rename = "crafted")]
+    pub crafted: i32,
+    #[serde(rename = "deloot")]
+    pub deloot: i32,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Category {
+    #[serde(rename = "name")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct SpawnableType {
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "attachments")]
+    pub attachments: Option<Vec<Attachment>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Attachment {
+    #[serde(rename = "chance")]
+    pub chance: f64,
+    #[serde(rename = "item")]
+    pub item: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Event {
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "waves")]
+    pub waves: i32,
+    #[serde(rename = "nominal")]
+    pub nominal: i32,
+    #[serde(rename = "min")]
+    pub min: i32,
+    #[serde(rename = "max")]
+    pub max: i32,
+    #[serde(rename = "lifetime")]
+    pub lifetime: i32,
+    #[serde(rename = "restock")]
+    pub restock: i32,
+    #[serde(rename = "saferadius")]
+    pub saferadius: i32,
+    #[serde(rename = "distanceradius")]
+    pub distanceraduis: i32,
+    #[serde(rename = "cleanupradius")]
+    pub cleanupradius: i32,
+    #[serde(rename = "flags")]
+    pub flags: Flags,
+    #[serde(rename = "position")]
+    pub position: String,
+    #[serde(rename = "limit")]
+    pub limit: String,
+    #[serde(rename = "active")]
+    pub active: i32,
+    #[serde(rename = "children")]
+    pub children: Option<Vec<Child>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Child {
+    #[serde(rename = "lootmax")]
+    pub lootmax: i32,
+    #[serde(rename = "lootmin")]
+    pub lootmin: i32,
+    #[serde(rename = "max")]
+    pub max: i32,
+    #[serde(rename = "min")]
+    pub min: i32,
+    #[serde(rename = "type")]
+    pub type_: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename = "types")]
+pub struct TypesWrapper {
+    #[serde(rename = "type")]
+    types: Vec<Type>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename = "spawnabletypes")]
+pub struct SpawnableTypesWrapper {
+    #[serde(rename = "type")]
+    spawnable_types: Vec<SpawnableType>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename = "events")]
+pub struct EventsWrapper {
+    #[serde(rename = "event")]
+    events: Vec<Event>,
 }

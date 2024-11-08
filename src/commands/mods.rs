@@ -1,15 +1,17 @@
 use inquire::MultiSelect;
 use regex::Regex;
-use serde_json::Value;
+use serde::{de::DeserializeOwned, Serialize};
+use serde_json::{from_str, to_string, Value};
 use std::{
-    fs::{copy, create_dir_all, File},
-    io::Read,
+    fs::{copy, create_dir_all, read_dir, File},
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
 use crate::{
     utils::{add_mods_to_profile, get_config_path, get_profile},
-    Mod, ModError, Profile, ThreadPool,
+    Event, EventsWrapper, Mod, ModError, Profile, SpawnableType, SpawnableTypesWrapper, ThreadPool,
+    Type, TypesWrapper,
 };
 
 /// Installs selected mods from the workshop directory to the workdir directory.
@@ -20,7 +22,6 @@ use crate::{
 /// with the installed mods.
 pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModError> {
     let workshop_path = profile.workshop_path.clone();
-    let workdir_path = profile.workdir_path.clone();
     let path = Path::new(&workshop_path);
 
     let mut mods: Vec<String> = vec![];
@@ -85,10 +86,50 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
                     });
                 }
 
-                if let Some(types_source_path) = find_types_xml(&source_path) {
-                    println!("{}", types_source_path.display());
+                if let Some(types_folder_path) = find_types_folder(&source_path) {
+                    println!("Gefundener types-Ordner: {}", types_folder_path.display());
+                    let map_name = get_map_name(&workdir_path).ok_or(ModError::NotFound)?;
+                    let (types, spawnable_types, events) =
+                        process_types_folder(&types_folder_path).unwrap();
+
+                    if !types.is_empty() || !spawnable_types.is_empty() || !events.is_empty() {
+                        let mod_short_name = Mod {
+                            name: source_path
+                                .file_name()
+                                .ok_or(ModError::PathError)?
+                                .to_str()
+                                .ok_or(ModError::PathError)?
+                                .to_string(),
+                        }
+                        .short_name();
+                        pool.execute({
+                            let mod_short_name = mod_short_name.clone();
+                            let map_name = map_name.clone();
+                            let types = types.clone();
+                            let spawnable_types = spawnable_types.clone();
+                            let events = events.clone();
+                            move || {
+                                save_extracted_data(
+                                    &mod_short_name,
+                                    &map_name,
+                                    types,
+                                    spawnable_types,
+                                    events,
+                                )
+                                .unwrap();
+                            }
+                        });
+                    } else {
+                        println!(
+                            "Keine types, spawnable_types oder events gefunden für Mod: {}",
+                            source_path.display()
+                        );
+                    }
                 } else {
-                    println!("No types found. Please look up on the Steam Workshop page of the mod for more information.");
+                    println!(
+                        "Kein types-Ordner gefunden für Mod: {}",
+                        source_path.display()
+                    );
                 }
             }
 
@@ -210,24 +251,106 @@ fn parse_startup_parameter() -> Result<String, ModError> {
     Ok(startup_parameter)
 }
 
-fn find_types_xml(mod_path: &Path) -> Option<PathBuf> {
-    let re_types_xml = Regex::new(r"types\.xml").unwrap();
-    for entry in mod_path.read_dir().unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-
-        if path.is_file() {
-            let file_name = path.file_name().unwrap().to_string_lossy().to_lowercase();
-            if re_types_xml.is_match(&file_name) {
-                return Some(path);
+fn find_types_folder(path: &Path) -> Option<PathBuf> {
+    fn visit_dirs(dir: &Path) -> Option<PathBuf> {
+        if dir.is_dir() {
+            for entry in read_dir(dir).ok()? {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_dir() {
+                    if let Some(result) = visit_dirs(&path) {
+                        return Some(result);
+                    }
+                } else if path.is_file() {
+                    if path
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .contains("types")
+                    {
+                        return Some(path.parent().unwrap().to_path_buf());
+                    }
+                }
             }
-        } else if path.is_dir() {
-            if let Some(types_xml) = find_types_xml(&path) {
-                return Some(types_xml);
+        }
+        None
+    }
+
+    visit_dirs(path)
+}
+
+fn extract_xml_data<T: DeserializeOwned>(
+    file_path: &Path,
+    tag_name: &str,
+) -> Result<Vec<T>, Box<dyn std::error::Error>> {
+    let mut file = File::open(file_path)?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+
+    println!("Inhalt der Datei {}: \n{}", file_path.display(), content);
+
+    let mut data: Vec<T> = Vec::new();
+    let mut current_data = String::new();
+    let mut found_tag = false;
+
+    for line in content.lines() {
+        if found_tag {
+            current_data.push_str(line);
+
+            if line.contains(format!("</{}>", tag_name).as_str()) {
+                found_tag = false;
+                println!("Gefundener Tag: {}", current_data);
+                let type_data: T = from_str(&current_data)?;
+                data.push(type_data);
+                current_data.clear();
+            }
+        } else if line.starts_with(format!("<{}", tag_name).as_str()) {
+            found_tag = true;
+            current_data.push_str(line);
+        }
+    }
+
+    Ok(data)
+}
+
+fn extract_types(file_path: &Path) -> Result<Vec<Type>, Box<dyn std::error::Error>> {
+    extract_xml_data::<Type>(file_path, "type")
+}
+
+fn extract_cfgspawnabletypes(
+    file_path: &Path,
+) -> Result<Vec<SpawnableType>, Box<dyn std::error::Error>> {
+    extract_xml_data::<SpawnableType>(file_path, "type")
+}
+
+fn extract_events(file_path: &Path) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
+    extract_xml_data::<Event>(file_path, "event")
+}
+
+fn process_types_folder(
+    folder_path: &Path,
+) -> Result<(Vec<Type>, Vec<SpawnableType>, Vec<Event>), Box<dyn std::error::Error>> {
+    let mut types = Vec::new();
+    let mut spawnable_types = Vec::new();
+    let mut events = Vec::new();
+
+    for entry in read_dir(folder_path)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() {
+            let file_name = path.file_name().unwrap().to_str().unwrap();
+            if file_name.contains("types") {
+                types.extend(extract_types(&path).unwrap_or_default());
+            } else if file_name.contains("spawnabletypes") {
+                spawnable_types.extend(extract_cfgspawnabletypes(&path).unwrap_or_default());
+            } else if file_name.contains("events") {
+                events.extend(extract_events(&path).unwrap_or_default());
             }
         }
     }
-    None
+
+    Ok((types, spawnable_types, events))
 }
 
 fn get_map_name(workdir: &str) -> Option<String> {
@@ -239,24 +362,50 @@ fn get_map_name(workdir: &str) -> Option<String> {
 
     let re = Regex::new(r"(\w+.\w+)").unwrap();
 
-    if let Some(cap) = re.captures(&contents) {
-        return Some(cap[1].to_string());
-    } else {
-        None
-    }
+    re.captures(&contents).map(|cap| cap[1].to_string())
 }
 
-fn write_new_files(source_path: &Path, workdir: String) -> Result<(), ModError> {
-    let map_name = get_map_name(&workdir).unwrap();
+fn write_to_file<T: Serialize>(
+    data: &T,
+    file_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let xml_data = to_string(data)?;
+    let mut file = File::create(file_path)?;
+    file.write_all(b"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n")?;
+    file.write_all(xml_data.as_bytes())?;
+    Ok(())
+}
 
-    let target_path = Path::new(&workdir).join("mpmissions").join(&map_name);
+fn save_extracted_data(
+    mod_short_name: &str,
+    map_name: &str,
+    types: Vec<Type>,
+    spawnable_types: Vec<SpawnableType>,
+    events: Vec<Event>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let base_path = Path::new("mpmissions")
+        .join(map_name)
+        .join(format!("{}_ce", mod_short_name));
+    create_dir_all(&base_path)?;
 
-    let mod_name = source_path.file_name().unwrap().to_string_lossy();
-    let mods = Mod {
-        name: mod_name.to_string(),
-    };
+    if !types.is_empty() {
+        let types_wrapper = TypesWrapper { types };
+        let types_file_path = base_path.join(format!("{}types.xml", mod_short_name));
+        write_to_file(&types_wrapper, &types_file_path)?;
+    }
 
-    let mod_short_name = mods.short_name();
+    if !spawnable_types.is_empty() {
+        let spawnable_types_wrapper = SpawnableTypesWrapper { spawnable_types };
+        let spawnable_types_file_path =
+            base_path.join(format!("{}spawnabletypes.xml", mod_short_name));
+        write_to_file(&spawnable_types_wrapper, &spawnable_types_file_path)?;
+    }
+
+    if !events.is_empty() {
+        let events_wrapper = EventsWrapper { events };
+        let events_file_path = base_path.join(format!("{}events.xml", mod_short_name));
+        write_to_file(&events_wrapper, &events_file_path)?;
+    }
 
     Ok(())
 }
