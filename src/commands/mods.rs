@@ -261,16 +261,15 @@ fn find_types_folder(path: &Path) -> Option<PathBuf> {
                     if let Some(result) = visit_dirs(&path) {
                         return Some(result);
                     }
-                } else if path.is_file() {
-                    if path
+                } else if path.is_file()
+                    && path
                         .file_name()
                         .unwrap()
                         .to_str()
                         .unwrap()
                         .contains("types")
-                    {
-                        return Some(path.parent().unwrap().to_path_buf());
-                    }
+                {
+                    return Some(path.parent().unwrap().to_path_buf());
                 }
             }
         }
@@ -328,9 +327,10 @@ fn extract_events(file_path: &Path) -> Result<Vec<Event>, Box<dyn std::error::Er
     extract_xml_data::<Event>(file_path, "event")
 }
 
-fn process_types_folder(
-    folder_path: &Path,
-) -> Result<(Vec<Type>, Vec<SpawnableType>, Vec<Event>), Box<dyn std::error::Error>> {
+type ProcessedTypesResult =
+    Result<(Vec<Type>, Vec<SpawnableType>, Vec<Event>), Box<dyn std::error::Error>>;
+
+fn process_types_folder(folder_path: &Path) -> ProcessedTypesResult {
     let mut types = Vec::new();
     let mut spawnable_types = Vec::new();
     let mut events = Vec::new();
