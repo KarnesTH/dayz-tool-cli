@@ -196,7 +196,7 @@ pub struct Mod {
 impl Mod {
     pub fn short_name(&self) -> String {
         let mut short_name = String::new();
-        let parts = self.name.split(|c| c == ' ' || c == '-' || c == '_');
+        let parts = self.name.split([' ', '-', '_']);
         for part in parts {
             short_name.push_str(&part.chars().take(3).collect::<String>().replace("'@'", ""));
         }
