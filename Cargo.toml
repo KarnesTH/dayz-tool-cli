@@ -9,6 +9,7 @@ clap = { version = "4.5.20", features = ["derive"] }
 inquire = "0.7.5"
 lazy_static = "1.5.0"
 num_cpus = "1.16.0"
+quick-xml = { version = "0.37.0", features = ["serialize"] }
 regex = "1.11.1"
 serde = { version = "1.0.214", features = ["derive"] }
 serde-xml-rs = "0.6.0"

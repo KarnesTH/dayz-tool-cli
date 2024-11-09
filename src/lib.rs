@@ -1,5 +1,8 @@
 use std::{
-    sync::{mpsc, Arc, Mutex},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc, Arc, Mutex,
+    },
     thread,
 };
 
@@ -101,6 +104,7 @@ lazy_static! {
 pub struct ThreadPool {
     workers: Vec<Worker>,
     sender: mpsc::Sender<Box<dyn FnOnce() + Send>>,
+    job_count: Arc<AtomicUsize>,
 }
 
 type Job = Box<dyn FnOnce() + Send>;
@@ -111,24 +115,38 @@ impl ThreadPool {
         assert!(size > 0);
 
         let (sender, receiver) = mpsc::channel();
-
         let receiver = Arc::new(Mutex::new(receiver));
+        let job_count = Arc::new(AtomicUsize::new(0));
 
         let mut workers = Vec::with_capacity(size);
-
         for _ in 0..size {
             workers.push(Worker::new(receiver.clone()));
         }
 
-        ThreadPool { workers, sender }
+        ThreadPool {
+            workers,
+            sender,
+            job_count,
+        }
     }
 
     pub fn execute<F>(&self, task: F)
     where
         F: FnOnce() + Send + 'static,
     {
-        let task = Box::new(task);
+        self.job_count.fetch_add(1, Ordering::SeqCst);
+        let job_count = self.job_count.clone();
+        let task = Box::new(move || {
+            task();
+            job_count.fetch_sub(1, Ordering::SeqCst);
+        });
         self.sender.send(task).unwrap();
+    }
+
+    pub fn wait(&self) {
+        while self.job_count.load(Ordering::SeqCst) > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 }
 
@@ -180,65 +198,91 @@ impl Mod {
         let mut short_name = String::new();
         let parts = self.name.split(|c| c == ' ' || c == '-' || c == '_');
         for part in parts {
-            short_name.push_str(&part.chars().take(3).collect::<String>());
+            short_name.push_str(&part.chars().take(3).collect::<String>().replace("'@'", ""));
         }
         short_name
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct Types {
+    #[serde(rename = "type")]
+    pub items: Vec<Type>,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Type {
-    #[serde(rename = "name")]
+    #[serde(rename = "@name", alias = "name")]
     pub name: String,
-    #[serde(rename = "nominal")]
-    pub nominal: i32,
-    #[serde(rename = "lifetime")]
-    pub lifetime: i32,
-    #[serde(rename = "restock")]
-    pub restock: i32,
-    #[serde(rename = "min")]
-    pub min: i32,
-    #[serde(rename = "quantmin")]
-    pub quantmin: i32,
-    #[serde(rename = "quantmax")]
-    pub quantmax: i32,
-    #[serde(rename = "cost")]
-    pub cost: i32,
-    #[serde(rename = "flags")]
-    pub flags: Flags,
-    #[serde(rename = "category")]
-    pub category: Category,
-    #[serde(rename = "usage")]
-    pub usage: Option<Vec<String>>,
-    #[serde(rename = "tag")]
-    pub tag: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nominal: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifetime: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restock: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantmin: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantmax: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flags: Option<Flags>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<Category>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Vec<Usage>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<Vec<Tag>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<Vec<TypeValue>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Flags {
-    #[serde(rename = "count_in_cargo")]
+    #[serde(rename = "@count_in_cargo", alias = "count_in_cargo")]
     pub count_in_cargo: i32,
-    #[serde(rename = "count_in_hoarder")]
+    #[serde(rename = "@count_in_hoarder", alias = "count_in_hoarder")]
     pub count_in_hoarder: i32,
-    #[serde(rename = "count_in_map")]
+    #[serde(rename = "@count_in_map", alias = "count_in_map")]
     pub count_in_map: i32,
-    #[serde(rename = "count_in_player")]
+    #[serde(rename = "@count_in_player", alias = "count_in_player")]
     pub count_in_player: i32,
-    #[serde(rename = "crafted")]
+    #[serde(rename = "@crafted", alias = "crafted")]
     pub crafted: i32,
-    #[serde(rename = "deloot")]
+    #[serde(rename = "@deloot", alias = "deloot")]
     pub deloot: i32,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Category {
-    #[serde(rename = "name")]
+    #[serde(rename = "@name", alias = "name")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Usage {
+    #[serde(rename = "@name", alias = "name")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Tag {
+    #[serde(rename = "@name", alias = "name")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct TypeValue {
+    #[serde(rename = "@name", alias = "name")]
     pub name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct SpawnableType {
-    #[serde(rename = "name")]
+    #[serde(rename = "name", alias = "@name")]
     pub name: String,
     #[serde(rename = "attachments")]
     pub attachments: Option<Vec<Attachment>>,
@@ -246,57 +290,39 @@ pub struct SpawnableType {
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Attachment {
-    #[serde(rename = "chance")]
+    #[serde(rename = "chance", alias = "@chance")]
     pub chance: f64,
-    #[serde(rename = "item")]
+    #[serde(rename = "item", alias = "@item")]
     pub item: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Event {
-    #[serde(rename = "name")]
+    #[serde(rename = "name", alias = "@name")]
     pub name: String,
-    #[serde(rename = "waves")]
     pub waves: i32,
-    #[serde(rename = "nominal")]
     pub nominal: i32,
-    #[serde(rename = "min")]
     pub min: i32,
-    #[serde(rename = "max")]
     pub max: i32,
-    #[serde(rename = "lifetime")]
     pub lifetime: i32,
-    #[serde(rename = "restock")]
     pub restock: i32,
-    #[serde(rename = "saferadius")]
     pub saferadius: i32,
-    #[serde(rename = "distanceradius")]
     pub distanceraduis: i32,
-    #[serde(rename = "cleanupradius")]
     pub cleanupradius: i32,
-    #[serde(rename = "flags")]
     pub flags: Flags,
-    #[serde(rename = "position")]
     pub position: String,
-    #[serde(rename = "limit")]
     pub limit: String,
-    #[serde(rename = "active")]
     pub active: i32,
-    #[serde(rename = "children")]
     pub children: Option<Vec<Child>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Child {
-    #[serde(rename = "lootmax")]
     pub lootmax: i32,
-    #[serde(rename = "lootmin")]
     pub lootmin: i32,
-    #[serde(rename = "max")]
     pub max: i32,
-    #[serde(rename = "min")]
     pub min: i32,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", alias = "@type")]
     pub type_: String,
 }
 
@@ -304,19 +330,17 @@ pub struct Child {
 #[serde(rename = "types")]
 pub struct TypesWrapper {
     #[serde(rename = "type")]
-    types: Vec<Type>,
+    pub types: Vec<Type>,
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename = "spawnabletypes")]
 pub struct SpawnableTypesWrapper {
     #[serde(rename = "type")]
-    spawnable_types: Vec<SpawnableType>,
+    pub spawnable_types: Vec<SpawnableType>,
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename = "events")]
 pub struct EventsWrapper {
     #[serde(rename = "event")]
-    events: Vec<Event>,
+    pub events: Vec<Event>,
 }
