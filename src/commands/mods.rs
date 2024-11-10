@@ -494,8 +494,20 @@ where
 
     let xml = to_string(&data)?;
 
-    let formatted = xml
-        .replace("<types>", "<types>\n")
+    let formatted = if xml.contains("<types>") {
+        format_types(&xml)
+    } else if xml.contains("<spawnabletypes>") {
+        format_spawnabletypes(&xml)
+    } else {
+        format_events(&xml)
+    };
+
+    file.write_all(formatted.as_bytes())?;
+    Ok(())
+}
+
+fn format_types(xml: &str) -> String {
+    xml.replace("<types>", "<types>\n")
         .replace("<type ", "\t<type ")
         .replace("><nominal>", ">\n\t\t<nominal>")
         .replace("</nominal><", "</nominal>\n\t\t<")
@@ -511,10 +523,39 @@ where
         .replace("/><tag", "/>\n\t\t<tag")
         .replace("/><value", "/>\n\t\t<value")
         .replace("</type>", "\n\t</type>\n")
-        .replace("</types>", "</types>\n");
+        .replace("</types>", "</types>\n")
+}
 
-    file.write_all(formatted.as_bytes())?;
-    Ok(())
+fn format_spawnabletypes(xml: &str) -> String {
+    xml.replace("<spanwabletypes>", "<spawnabletypes>\n")
+        .replace("<type ", "\t<type ")
+        .replace("><attachments", ">\n\t\t<attachments")
+        .replace("</attachments>", "</attachments>\n\t\t")
+        .replace("<item", "\n\t\t\t<item")
+        .replace("</type>", "\n\t</type>\n")
+        .replace("</spawnabletypes>", "</spawnabletypes>\n")
+}
+
+fn format_events(xml: &str) -> String {
+    xml.replace("<events>", "<events>\n")
+        .replace("<event ", "\t<event ")
+        .replace("><nominal>", ">\n\t\t<nominal>")
+        .replace("</nominal><", "</nominal>\n\t\t<")
+        .replace("</lifetime><", "</lifetime>\n\t\t<")
+        .replace("</restock><", "</restock>\n\t\t<")
+        .replace("</min><", "</min>\n\t\t<")
+        .replace("</max><", "</max>\n\t\t<")
+        .replace("</saferadius><", "</saferadius>\n\t\t<")
+        .replace("</distanceraduis><", "</distanceraduis>\n\t\t<")
+        .replace("</cleanupradius><", "</cleanupradius>\n\t\t<")
+        .replace("/><flags", "/>\n\t\t<flags")
+        .replace("</position><", "</position>\n\t\t<")
+        .replace("</limit><", "</limit>\n\t\t<")
+        .replace("</active><", "</active>\n\t\t<")
+        .replace("</children><", "</children>\n\t\t<")
+        .replace("/><child", "/>\n\t\t\t<child")
+        .replace("</event>", "\n\t</event>\n")
+        .replace("</events>", "</events>\n")
 }
 
 fn save_extracted_data(

@@ -198,7 +198,7 @@ impl Mod {
         let mut short_name = String::new();
         let parts = self.name.split([' ', '-', '_']);
         for part in parts {
-            short_name.push_str(&part.chars().take(3).collect::<String>().replace("'@'", ""));
+            short_name.push_str(&part.chars().take(3).collect::<String>().replace('@', ""));
         }
         short_name
     }
@@ -280,50 +280,95 @@ pub struct TypeValue {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-pub struct SpawnableType {
-    #[serde(rename = "name", alias = "@name")]
-    pub name: String,
-    #[serde(rename = "attachments")]
-    pub attachments: Option<Vec<Attachment>>,
+#[derive(Debug, Serialize)]
+pub struct SpawnableTypes {
+    #[serde(rename = "type")]
+    pub items: Vec<SpawnableType>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
-pub struct Attachment {
-    #[serde(rename = "chance", alias = "@chance")]
+pub struct SpawnableType {
+    #[serde(rename = "@name", alias = "name")]
+    pub name: String,
+    pub attachments: Vec<Attachments>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Attachments {
+    #[serde(rename = "@chance", alias = "chance")]
     pub chance: f64,
-    #[serde(rename = "item", alias = "@item")]
-    pub item: String,
+    pub item: Vec<Item>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Item {
+    #[serde(rename = "@name", alias = "name")]
+    pub name: String,
+    #[serde(rename = "@chance", alias = "chance")]
+    pub chance: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Events {
+    #[serde(rename = "event")]
+    pub items: Vec<Event>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Event {
-    #[serde(rename = "name", alias = "@name")]
+    #[serde(rename = "@name", alias = "name")]
     pub name: String,
-    pub waves: i32,
-    pub nominal: i32,
-    pub min: i32,
-    pub max: i32,
-    pub lifetime: i32,
-    pub restock: i32,
-    pub saferadius: i32,
-    pub distanceraduis: i32,
-    pub cleanupradius: i32,
-    pub flags: Flags,
-    pub position: String,
-    pub limit: String,
-    pub active: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nominal: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifetime: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restock: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub saferadius: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distanceraduis: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cleanupradius: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flags: Option<EventFlags>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<Child>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(rename = "child")]
 pub struct Child {
+    #[serde(rename = "@lootmax", alias = "lootmax")]
     pub lootmax: i32,
+    #[serde(rename = "@lootmin", alias = "lootmin")]
     pub lootmin: i32,
+    #[serde(rename = "@max", alias = "max")]
     pub max: i32,
+    #[serde(rename = "@min", alias = "min")]
     pub min: i32,
-    #[serde(rename = "type", alias = "@type")]
+    #[serde(rename = "@type", alias = "type")]
     pub type_: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct EventFlags {
+    #[serde(rename = "@deletable", alias = "deletable")]
+    pub deletable: i32,
+    #[serde(rename = "@init_random", alias = "init_random")]
+    pub init_random: i32,
+    #[serde(rename = "@remove_damaged", alias = "remove_damaged")]
+    pub remove_damaged: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -334,12 +379,14 @@ pub struct TypesWrapper {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename = "spawnabletypes")]
 pub struct SpawnableTypesWrapper {
     #[serde(rename = "type")]
     pub spawnable_types: Vec<SpawnableType>,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename = "events")]
 pub struct EventsWrapper {
     #[serde(rename = "event")]
     pub events: Vec<Event>,
