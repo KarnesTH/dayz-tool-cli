@@ -527,10 +527,10 @@ fn format_types(xml: &str) -> String {
 }
 
 fn format_spawnabletypes(xml: &str) -> String {
-    xml.replace("<spanwabletypes>", "<spawnabletypes>\n")
+    xml.replace("<spawnabletypes>", "<spawnabletypes>\n")
         .replace("<type ", "\t<type ")
         .replace("><attachments", ">\n\t\t<attachments")
-        .replace("</attachments>", "</attachments>\n\t\t")
+        .replace("/></attachments>", "/>\n\t\t</attachments>")
         .replace("<item", "\n\t\t\t<item")
         .replace("</type>", "\n\t</type>\n")
         .replace("</spawnabletypes>", "</spawnabletypes>\n")
@@ -549,10 +549,12 @@ fn format_events(xml: &str) -> String {
         .replace("</distanceraduis><", "</distanceraduis>\n\t\t<")
         .replace("</cleanupradius><", "</cleanupradius>\n\t\t<")
         .replace("/><flags", "/>\n\t\t<flags")
+        .replace("/><position", "/>\n\t\t<position")
         .replace("</position><", "</position>\n\t\t<")
         .replace("</limit><", "</limit>\n\t\t<")
         .replace("</active><", "</active>\n\t\t<")
-        .replace("</children><", "</children>\n\t\t<")
+        .replace("</children>", "\n\t\t</children>")
+        .replace("><child", ">\n\t\t\t<child")
         .replace("/><child", "/>\n\t\t\t<child")
         .replace("</event>", "\n\t</event>\n")
         .replace("</events>", "</events>\n")

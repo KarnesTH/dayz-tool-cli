@@ -343,7 +343,14 @@ pub struct Event {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub children: Option<Vec<Child>>,
+    pub children: Option<Vec<Children>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(rename = "children")]
+pub struct Children {
+    #[serde(rename = "child")]
+    pub items: Vec<Child>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
