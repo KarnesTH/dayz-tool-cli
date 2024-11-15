@@ -278,6 +278,12 @@ fn parse_startup_parameter() -> Result<String, ModError> {
     Ok(startup_parameter)
 }
 
+/// Recursively searches for a folder containing a file with "types" in its name.
+///
+/// This function starts at the given path and traverses directories recursively
+/// to find a folder that contains a file with "types" in its name. If such a folder
+/// is found, the path to the folder is returned. If no such folder is found, `None`
+/// is returned.
 fn find_types_folder(path: &Path) -> Option<PathBuf> {
     fn visit_dirs(dir: &Path) -> Option<PathBuf> {
         if dir.is_dir() {
@@ -306,6 +312,12 @@ fn find_types_folder(path: &Path) -> Option<PathBuf> {
     visit_dirs(path)
 }
 
+/// Extracts XML data elements from a given file.
+///
+/// This function reads the content of the specified XML file and extracts elements
+/// of type `<type>` or `<event>`. It handles cases where the root tag might be missing
+/// and adds it if necessary. The function returns a vector of strings, each containing
+/// a complete XML element.
 fn extract_xml_data(file_path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut file = File::open(file_path)?;
     let mut content = String::new();
@@ -368,6 +380,12 @@ fn extract_xml_data(file_path: &Path) -> Result<Vec<String>, Box<dyn std::error:
     Ok(data)
 }
 
+/// Extracts `Type` elements from a given XML file.
+///
+/// This function reads the content of the specified XML file and extracts elements
+/// of type `<type>`. It uses the `extract_xml_data` function to get the raw XML strings
+/// and then parses each string into a `Type` struct. The function returns a vector of
+/// `Type` structs.
 fn extract_types(file_path: &Path) -> Result<Vec<Type>, Box<dyn std::error::Error>> {
     let xml_strings = extract_xml_data(file_path)?;
 
@@ -384,6 +402,12 @@ fn extract_types(file_path: &Path) -> Result<Vec<Type>, Box<dyn std::error::Erro
     Ok(types)
 }
 
+/// Extracts `SpawnableType` elements from a given XML file.
+///
+/// This function reads the content of the specified XML file and extracts elements
+/// of type `<type>`. It uses the `extract_xml_data` function to get the raw XML strings
+/// and then parses each string into a `SpawnableType` struct. The function returns a vector
+/// of `SpawnableType` structs.
 fn extract_cfgspawnabletypes(
     file_path: &Path,
 ) -> Result<Vec<SpawnableType>, Box<dyn std::error::Error>> {
@@ -402,6 +426,12 @@ fn extract_cfgspawnabletypes(
     Ok(spawnable_types)
 }
 
+/// Extracts `Event` elements from a given XML file.
+///
+/// This function reads the content of the specified XML file and extracts elements
+/// of type `<event>`. It uses the `extract_xml_data` function to get the raw XML strings
+/// and then parses each string into an `Event` struct. The function returns a vector
+/// of `Event` structs.
 fn extract_events(file_path: &Path) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
     let xml_strings = extract_xml_data(file_path)?;
 
@@ -418,6 +448,13 @@ fn extract_events(file_path: &Path) -> Result<Vec<Event>, Box<dyn std::error::Er
     Ok(events)
 }
 
+/// A type alias for the result of an analysis operation.
+///
+/// This type alias represents the result of an analysis operation that may return
+/// vectors of `Type`, `SpawnableType`, and `Event` structs. Each of these vectors
+/// is optional, meaning that the analysis may return any combination of these types
+/// or none at all. If an error occurs during the analysis, it will return an error
+/// boxed as `Box<dyn std::error::Error>`.
 type AnalyzeResult = Result<
     (
         Option<Vec<Type>>,
@@ -427,6 +464,12 @@ type AnalyzeResult = Result<
     Box<dyn std::error::Error>,
 >;
 
+/// Analyzes a folder for XML files containing `Type`, `SpawnableType`, and `Event` elements.
+///
+/// This function searches the specified folder for XML files that contain `Type`, `SpawnableType`,
+/// and `Event` elements. It processes each file accordingly and extracts the relevant data into
+/// vectors. The function returns a tuple containing optional vectors of `Type`, `SpawnableType`,
+/// and `Event` structs.
 fn analyze_types_folder(folder_path: &Path) -> AnalyzeResult {
     let mut types = Vec::new();
     let mut spawnable_types = Vec::new();
@@ -466,6 +509,12 @@ fn analyze_types_folder(folder_path: &Path) -> AnalyzeResult {
     Ok((Some(types), Some(spawnable_types), Some(events)))
 }
 
+/// Retrieves the map name from the `serverDZ.cfg` file in the specified working directory.
+///
+/// This function searches for the `serverDZ.cfg` file in the given working directory and
+/// extracts the map name using a regular expression. The map name is expected to be in the
+/// format `word.word` (e.g., `chernarusplus.chernarus`). If the file is not found or the
+/// map name cannot be extracted, an error is returned.
 fn get_map_name(workdir: &str) -> Result<String, ModError> {
     let cfg_path = Path::new(workdir).join("serverDZ.cfg");
 
@@ -485,6 +534,12 @@ fn get_map_name(workdir: &str) -> Result<String, ModError> {
         .ok_or(ModError::NotFound)
 }
 
+/// Writes serialized data to an XML file with proper formatting.
+///
+/// This function takes a reference to serializable data and a file path, serializes the data
+/// to an XML string, and writes it to the specified file. The XML content is formatted based
+/// on the root element (`<types>`, `<spawnabletypes>`, or `<events>`). The function also writes
+/// the XML declaration at the beginning of the file.
 fn write_to_file<T>(data: &T, file_path: &Path) -> Result<(), Box<dyn std::error::Error>>
 where
     T: Serialize + std::fmt::Debug,
@@ -506,6 +561,11 @@ where
     Ok(())
 }
 
+/// Formats the XML string for `Type` elements with proper indentation and line breaks.
+///
+/// This function takes an XML string containing `<types>` and `<type>` elements and formats it
+/// with appropriate indentation and line breaks to improve readability. It ensures that each
+/// element and its sub-elements are properly indented and separated by new lines.
 fn format_types(xml: &str) -> String {
     xml.replace("<types>", "<types>\n")
         .replace("<type ", "\t<type ")
@@ -526,6 +586,11 @@ fn format_types(xml: &str) -> String {
         .replace("</types>", "</types>\n")
 }
 
+/// Formats the XML string for `SpawnableType` elements with proper indentation and line breaks.
+///
+/// This function takes an XML string containing `<spawnabletypes>` and `<type>` elements and formats it
+/// with appropriate indentation and line breaks to improve readability. It ensures that each
+/// element and its sub-elements are properly indented and separated by new lines.
 fn format_spawnabletypes(xml: &str) -> String {
     xml.replace("<spawnabletypes>", "<spawnabletypes>\n")
         .replace("<type ", "\t<type ")
@@ -536,6 +601,11 @@ fn format_spawnabletypes(xml: &str) -> String {
         .replace("</spawnabletypes>", "</spawnabletypes>\n")
 }
 
+/// Formats the XML string for `Event` elements with proper indentation and line breaks.
+///
+/// This function takes an XML string containing `<events>` and `<event>` elements and formats it
+/// with appropriate indentation and line breaks to improve readability. It ensures that each
+/// element and its sub-elements are properly indented and separated by new lines.
 fn format_events(xml: &str) -> String {
     xml.replace("<events>", "<events>\n")
         .replace("<event ", "\t<event ")
@@ -560,6 +630,12 @@ fn format_events(xml: &str) -> String {
         .replace("</events>", "</events>\n")
 }
 
+/// Saves extracted data (`Type`, `SpawnableType`, and `Event` elements) to XML files.
+///
+/// This function takes the extracted data and saves it to XML files in a specified directory
+/// structure. The files are named based on the provided `mod_short_name` and are saved in a
+/// subdirectory under the specified `workdir` and `map_name`. The function creates the necessary
+/// directories if they do not exist.
 fn save_extracted_data(
     workdir: &str,
     mod_short_name: &str,
