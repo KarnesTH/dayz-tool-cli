@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 use serde_xml_rs::from_str;
 use std::{
-    fs::{copy, create_dir_all, read_dir, File},
+    fs::{copy, create_dir_all, read_dir, read_to_string, File},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
@@ -319,20 +319,20 @@ pub fn analyze_types_folder(folder_path: &Path) -> AnalyzeResult {
                 .unwrap_or("")
                 .to_lowercase();
 
-            eprintln!("Gefundene Datei: {}", file_name);
+            info!("File found: {}", file_name);
 
             if file_name.contains("types") && !file_name.contains("spawnable") {
-                eprintln!("Verarbeite types datei");
+                info!("Processing types file");
                 types = extract_types(&path)?;
-                eprintln!("Gefundene Types: {}", types.len());
+                info!("Found Types: {}", types.len());
             } else if file_name.contains("spawnabletypes") {
-                eprintln!("Verarbeite spawnabletypes datei");
+                info!("Processing spawnabletypes file");
                 spawnable_types = extract_cfgspawnabletypes(&path)?;
-                eprintln!("Gefundene SpawnableTypes: {}", spawnable_types.len());
+                info!("Found SpawnableTypes: {}", spawnable_types.len());
             } else if file_name.contains("events") {
-                eprintln!("Verarbeite events datei");
+                info!("Processing events file");
                 events = extract_events(&path)?;
-                eprintln!("Gefundene Events: {}", events.len());
+                info!("Found Events: {}", events.len());
             }
         }
     }
@@ -512,6 +512,68 @@ pub fn get_installed_mod_list(profile: Profile) -> Result<Vec<Value>, ModError> 
     let installed_mods = profile.installed_mods;
 
     Ok(installed_mods)
+}
+
+/// Updates the cfgeconomycore.xml file by adding CE (Central Economy) entries for a mod.
+///
+/// This function adds XML entries for types, spawnable types, and events files that exist
+/// for the given mod. The entries are added just before the closing </economycore> tag.
+pub fn update_cfgeconomy(
+    workdir: &str,
+    mod_short_name: &str,
+    types: Vec<Type>,
+    spawnable_types: Vec<SpawnableType>,
+    events: Vec<Event>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if types.is_empty() && spawnable_types.is_empty() && events.is_empty() {
+        return Ok(());
+    }
+
+    let file_path = Path::new(workdir)
+        .join("mpmissions")
+        .join(get_map_name(workdir)?)
+        .join("cfgeconomycore.xml");
+
+    let content = read_to_string(&file_path)?;
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+
+    let end_idx = lines
+        .iter()
+        .position(|line| line.trim() == "</economycore>")
+        .ok_or("Could not find closing economycore tag")?;
+
+    let mut new_content = vec![
+        format!("\t<!-- {} -->", mod_short_name),
+        format!("\t<ce folder=\"{}_ce\">", mod_short_name),
+    ];
+
+    if !types.is_empty() {
+        new_content.push(format!(
+            "\t\t<file name=\"{}_types.xml\" type=\"types\" />",
+            mod_short_name
+        ));
+    }
+
+    if !spawnable_types.is_empty() {
+        new_content.push(format!(
+            "\t\t<file name=\"{}_spawnabletypes.xml\" type=\"spawnabletypes\" />",
+            mod_short_name
+        ));
+    }
+    if !events.is_empty() {
+        new_content.push(format!(
+            "\t\t<file name=\"{}_events.xml\" type=\"events\" />",
+            mod_short_name
+        ));
+    }
+
+    new_content.push("\t</ce>".to_string());
+
+    lines.splice(end_idx..end_idx, new_content);
+
+    std::fs::write(&file_path, lines.join("\n"))?;
+
+    Ok(())
 }
 
 #[cfg(test)]

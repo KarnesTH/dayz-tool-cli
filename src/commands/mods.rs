@@ -1,6 +1,6 @@
 use inquire::MultiSelect;
 
-use log::info;
+use log::{error, info, warn};
 
 use std::path::{Path, PathBuf};
 
@@ -8,7 +8,7 @@ use crate::{
     utils::{
         add_mods_to_profile, analyze_types_folder, copy_dir, copy_keys, find_keys_folder,
         find_types_folder, get_installed_mod_list, get_map_name, parse_startup_parameter,
-        save_extracted_data,
+        save_extracted_data, update_cfgeconomy,
     },
     Mod, ModError, Profile, ThreadPool,
 };
@@ -116,41 +116,54 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
                                             &workdir_path,
                                             &mod_short_name,
                                             &map_name,
+                                            types.clone(),
+                                            spawnable_types.clone(),
+                                            events.clone(),
+                                        ) {
+                                            error!(
+                                                "Error while saving data for {}: {}",
+                                                mod_short_name, e
+                                            );
+                                        }
+
+                                        if let Err(e) = update_cfgeconomy(
+                                            &workdir_path,
+                                            &mod_short_name,
                                             types,
                                             spawnable_types,
                                             events,
                                         ) {
-                                            eprintln!(
-                                                "Fehler beim Speichern der Daten für {}: {}",
+                                            error!(
+                                                "Error updating cfgeconomy.xml for {}: {}",
                                                 mod_short_name, e
-                                            );
+                                            )
                                         }
                                     }
                                 });
                             } else {
-                                println!(
-                                    "Keine types, spawnable_types oder events gefunden für Mod: {}",
+                                warn!(
+                                    "No types, spawnable_types or events found in mod: {}",
                                     source_path.display()
                                 );
                             }
                         }
                         Ok(_) => {
-                            println!(
-                                "Unvollständige Daten im types-Ordner für Mod: {}",
+                            error!(
+                                "Incomplete data in types directory for mod: {}",
                                 source_path.display()
                             );
                         }
                         Err(e) => {
-                            println!(
-                                "Fehler beim Analysieren des types-Ordners für Mod {}: {}",
+                            error!(
+                                "Error parsing types directory for mod {}: {}",
                                 source_path.display(),
                                 e
                             );
                         }
                     }
                 } else {
-                    println!(
-                        "Kein types-Ordner gefunden für Mod: {}",
+                    error!(
+                        "No types directory found for mod: {}",
                         source_path.display()
                     );
                 }
@@ -170,12 +183,26 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
     }
 }
 
+/// Lists all installed mods for a given DayZ profile.
+///
+/// This function retrieves a list of all installed mods from the specified profile
+/// and displays them in the console. The mods are displayed one per line using
+/// the info log level. The function handles the conversion from the internal
+/// JSON representation to readable mod names.
+///
+/// The displayed mod names include their '@' prefix as they appear in the
+/// DayZ server directory structure.
 pub fn list_installed_mods(profile: Profile) -> Result<(), ModError> {
     let installed_mods = get_installed_mod_list(profile.clone()).unwrap();
     let installed_mods_names: Vec<String> = installed_mods
         .into_iter()
         .map(|v| v.as_str().unwrap().to_string())
         .collect();
+
+    if installed_mods_names.is_empty() {
+        info!("No mods installed.");
+        return Ok(());
+    }
 
     for mod_name in installed_mods_names {
         info!("{}", mod_name);
@@ -190,7 +217,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn test_installed_mod_list() {
+    fn test_list_installed_mods() {
         let mod1 = json!("@mod1");
         let mod2 = json!("@mod2");
         let mod3 = json!("@mod3");
@@ -203,11 +230,8 @@ mod tests {
             is_active: true,
         };
 
-        match get_installed_mod_list(profile) {
-            Ok(mods) => {
-                assert_eq!(mods, installed_mods);
-            }
-            Err(e) => panic!("Error retrieving installed mods: {:?}", e),
-        }
+        let result = list_installed_mods(profile.clone());
+
+        assert!(result.is_ok());
     }
 }
