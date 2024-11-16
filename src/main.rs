@@ -1,9 +1,10 @@
 use clap::{Parser, Subcommand};
 use dayz_tool_cli::commands::{calculate_dnc, generate_guid, install_mods, installed_mod_list};
 use dayz_tool_cli::utils::{
-    create_initial_profile, get_config_path, get_profile, get_render_config,
+    create_initial_profile, get_config_path, get_profile, get_render_config, init_logger,
 };
 use dayz_tool_cli::THREAD_POOL;
+use log::{error, info, warn};
 
 /// A command-line tool for simplifying DayZ server administration.
 ///
@@ -122,13 +123,19 @@ enum ModCommands {
 
 fn main() {
     inquire::set_global_render_config(get_render_config());
+
+    if let Err(e) = init_logger() {
+        eprintln!("Failed to initialize logger: {}", e);
+        std::process::exit(1);
+    }
+
     let config_path = get_config_path();
     let profile = get_profile(&config_path);
 
     if !config_path.exists() {
         match create_initial_profile(&config_path) {
-            Ok(_) => println!("Initial profile created successfully! You can now use the CLI. Run `dayz-tool-cli --help` for more information."),
-            Err(_) => println!("Failed creating initial profile"),
+            Ok(_) => info!("Initial profile created successfully! You can now use the CLI. Run `dayz-tool-cli --help` for more information."),
+            Err(_) => error!("Failed creating initial profile"),
         }
     } else {
         let args = Cli::parse();
@@ -136,21 +143,21 @@ fn main() {
             Commands::Guid { id } => match id {
                 Some(id) => {
                     let guid = generate_guid(id);
-                    println!("The GUID form {} is: {}", id, guid);
+                    info!("The GUID form {} is: {}", id, guid);
                 }
-                None => println!("No ID provided"),
+                None => error!("No ID provided"),
             },
             Commands::Dnc { day, night } => {
                 if let (Some(day), Some(night)) = (day, night) {
                     match calculate_dnc(day, night) {
                         Ok((day_duration, night_duration)) => {
-                            println!("serverTimeAcceleration = {}", day_duration);
-                            println!("serverNightTimeAcceleration = {}", night_duration);
+                            info!("serverTimeAcceleration = {}", day_duration);
+                            info!("serverNightTimeAcceleration = {}", night_duration);
                         }
-                        Err(e) => println!("{}", e),
+                        Err(e) => error!("{}", e),
                     }
                 } else {
-                    println!("Bitte geben Sie sowohl die Tag- als auch die Nachtlänge an.");
+                    error!("Please enter both the day and night length.");
                 }
             }
             Commands::Mods { subcommands } => match subcommands {
@@ -158,12 +165,12 @@ fn main() {
                     Ok(profile) => {
                         match install_mods(&THREAD_POOL, profile) {
                             Ok(mods) => {
-                                println!("Please add this: {} to your startup parameters", mods)
+                                info!("Please add this: {} to your startup parameters", mods)
                             }
-                            Err(_) => println!("Failed to install mods"),
+                            Err(_) => error!("Failed to install mods"),
                         };
                     }
-                    Err(_) => println!("No profile found"),
+                    Err(_) => error!("No profile found"),
                 },
                 ModCommands::Uninstall { mod_name } => {
                     println!("Uninstalling mod: {}", mod_name);
@@ -172,17 +179,17 @@ fn main() {
                     Ok(profile) => match installed_mod_list(profile) {
                         Ok(mods) => {
                             if mods.is_empty() {
-                                println!("No mods installed");
+                                warn!("No mods installed");
                             } else {
-                                println!("Installed mods:");
+                                info!("Installed mods:");
                                 for installed_mod in mods {
-                                    println!("{}", installed_mod);
+                                    info!("{}", installed_mod);
                                 }
                             }
                         }
-                        Err(_) => println!("No mods found"),
+                        Err(_) => error!("No mods found"),
                     },
-                    Err(_) => println!("No profile found"),
+                    Err(_) => error!("No profile found"),
                 },
                 ModCommands::Update => {
                     println!("Updating mods...");
