@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
-use dayz_tool_cli::commands::{calculate_dnc, generate_guid, install_mods, installed_mod_list};
+use dayz_tool_cli::commands::{calculate_dnc, generate_guid, install_mods, list_installed_mods};
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config, init_logger,
 };
 use dayz_tool_cli::THREAD_POOL;
-use log::{error, info, warn};
+use log::{error, info};
 
 /// A command-line tool for simplifying DayZ server administration.
 ///
@@ -176,17 +176,8 @@ fn main() {
                     println!("Uninstalling mod: {}", mod_name);
                 }
                 ModCommands::List => match profile {
-                    Ok(profile) => match installed_mod_list(profile) {
-                        Ok(mods) => {
-                            if mods.is_empty() {
-                                warn!("No mods installed");
-                            } else {
-                                info!("Installed mods:");
-                                for installed_mod in mods {
-                                    info!("{}", installed_mod);
-                                }
-                            }
-                        }
+                    Ok(profile) => match list_installed_mods(profile) {
+                        Ok(mods) => mods,
                         Err(_) => error!("No mods found"),
                     },
                     Err(_) => error!("No profile found"),

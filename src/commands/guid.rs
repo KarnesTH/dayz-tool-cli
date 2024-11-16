@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose, Engine as _};
+use log::error;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 
@@ -17,10 +18,6 @@ use crate::{GuidError, Result};
 /// # Returns
 ///
 /// A String representing the generated GUID.
-///
-/// # Panics
-///
-/// Panics if the provided Steam64 ID is invalid.
 ///
 /// # Example
 ///
@@ -48,7 +45,7 @@ pub fn generate_guid(id: &str) -> String {
             guid.to_string()
         }
         Err(e) => {
-            eprintln!("{}", e);
+            error!("{}", e);
             std::process::exit(1);
         }
     }

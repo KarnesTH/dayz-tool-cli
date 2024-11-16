@@ -1,0 +1,551 @@
+use crate::{
+    utils::{get_config_path, get_profile},
+    Event, EventsWrapper, ModError, Profile, SpawnableType, SpawnableTypesWrapper, Type,
+    TypesWrapper,
+};
+use log::info;
+use quick_xml::se::to_string;
+use regex::Regex;
+use serde::Serialize;
+use serde_json::Value;
+use serde_xml_rs::from_str;
+use std::{
+    fs::{copy, create_dir_all, read_dir, File},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
+
+/// Recursively copies the contents of one directory to another.
+///
+/// This function takes a source directory and a target directory as input and
+/// recursively copies all files and subdirectories from the source to the target.
+/// If the target directory does not exist, it will be created. If any error occurs
+/// during the creation of the target directory or the copying of files, an appropriate
+/// `ModError` will be returned.
+pub fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
+    match create_dir_all(target_dir) {
+        Ok(dir) => dir,
+        Err(_) => {
+            return Err(ModError::CreateDirError);
+        }
+    }
+
+    for entry in source_dir.read_dir().unwrap() {
+        let entry = entry.unwrap();
+        let source_path = entry.path();
+        let target_path = target_dir.join(source_path.strip_prefix(source_dir).unwrap());
+
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&source_path, &target_path)?;
+        } else {
+            match copy(&source_path, &target_path) {
+                Ok(_) => {}
+                Err(_) => {
+                    return Err(ModError::CopyFileError);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Searches for a subdirectory named "keys" in the specified mod directory.
+///
+/// This function searches the given directory for a subdirectory named "keys"
+/// (case-insensitive). If such a directory is found, the path to this directory
+/// is returned. Otherwise, `None` is returned.
+pub fn find_keys_folder(mod_path: &Path) -> Option<PathBuf> {
+    for entry in mod_path.read_dir().unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_dir() {
+            let folder_name = entry.file_name().to_string_lossy().to_lowercase();
+            if folder_name == "keys" {
+                return Some(entry.path());
+            }
+        }
+    }
+    None
+}
+
+/// Copies all ".bikey" files from the source directory to the target directory.
+///
+/// This function iterates through the entries in the specified source directory,
+/// and copies all files with the ".bikey" extension to the target directory. If
+/// any file copy operation fails, it returns a `ModError::CopyFileError`.
+pub fn copy_keys(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
+    for entry in source_dir.read_dir().unwrap() {
+        let entry = entry.unwrap();
+        let source_path = entry.path();
+        if source_path.extension().and_then(|s| s.to_str()) == Some("bikey") {
+            let target_path = target_dir.join(source_path.file_name().unwrap());
+            if !target_path.exists() {
+                match copy(&source_path, &target_path) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        return Err(ModError::CopyFileError);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Generates a startup parameter string for the installed mods.
+///
+/// This function retrieves the configuration path and profile, then generates a list
+/// of installed mods. It formats these mods into a startup parameter string suitable
+pub fn parse_startup_parameter() -> Result<String, ModError> {
+    let config = get_config_path();
+    let updatet_profile = get_profile(&config).unwrap();
+
+    let installed_mods = get_installed_mod_list(updatet_profile).unwrap();
+    let installed_mods_strings: Vec<String> = installed_mods
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    let startup_parameter = format!("\"-mod={};\"", installed_mods_strings.join(";"));
+    Ok(startup_parameter)
+}
+
+/// Recursively searches for a folder containing a file with "types" in its name.
+///
+/// This function starts at the given path and traverses directories recursively
+/// to find a folder that contains a file with "types" in its name. If such a folder
+/// is found, the path to the folder is returned. If no such folder is found, `None`
+/// is returned.
+pub fn find_types_folder(path: &Path) -> Option<PathBuf> {
+    fn visit_dirs(dir: &Path) -> Option<PathBuf> {
+        if dir.is_dir() {
+            for entry in read_dir(dir).ok()? {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_dir() {
+                    if let Some(result) = visit_dirs(&path) {
+                        return Some(result);
+                    }
+                } else if path.is_file()
+                    && path
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .contains("types")
+                {
+                    return Some(path.parent().unwrap().to_path_buf());
+                }
+            }
+        }
+        None
+    }
+
+    visit_dirs(path)
+}
+
+/// Extracts XML data elements from a given file.
+///
+/// This function reads the content of the specified XML file and extracts elements
+/// of type `<type>` or `<event>`. It handles cases where the root tag might be missing
+/// and adds it if necessary. The function returns a vector of strings, each containing
+/// a complete XML element.
+fn extract_xml_data(file_path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut file = File::open(file_path)?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+
+    let content = if !content.contains("<types>")
+        && !content.contains("<spawnabletypes>")
+        && !content.contains("<events>")
+    {
+        let root_tag = if content.contains("<type") {
+            "types"
+        } else if content.contains("<event") {
+            "events"
+        } else {
+            "spawnabletypes"
+        };
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<{}>\n{}\n</{}>",
+            root_tag, content, root_tag
+        )
+    } else {
+        content
+    };
+
+    let mut data: Vec<String> = Vec::new();
+    let mut current_element = String::new();
+    let mut in_element_tag = false;
+
+    for line in content.lines() {
+        let trimmed_line = line.trim();
+        if trimmed_line.starts_with("<?xml")
+            || trimmed_line.starts_with("<types")
+            || trimmed_line.starts_with("<spawnabletypes")
+            || trimmed_line.starts_with("<events")
+            || trimmed_line.starts_with("</types")
+            || trimmed_line.starts_with("</spawnabletypes")
+            || trimmed_line.starts_with("</events")
+        {
+            continue;
+        }
+
+        if trimmed_line.starts_with("<type") || trimmed_line.starts_with("<event") {
+            in_element_tag = true;
+            current_element.clear();
+            current_element.push_str(trimmed_line);
+            current_element.push('\n');
+        } else if (trimmed_line.starts_with("</type") || trimmed_line.starts_with("</event"))
+            && in_element_tag
+        {
+            in_element_tag = false;
+            current_element.push_str(trimmed_line);
+            current_element.push('\n');
+            data.push(current_element.clone());
+        } else if in_element_tag && !trimmed_line.starts_with("<!--") {
+            current_element.push_str(trimmed_line);
+            current_element.push('\n');
+        }
+    }
+
+    Ok(data)
+}
+
+/// Extracts `Type` elements from a given XML file.
+///
+/// This function reads the content of the specified XML file and extracts elements
+/// of type `<type>`. It uses the `extract_xml_data` function to get the raw XML strings
+/// and then parses each string into a `Type` struct. The function returns a vector of
+/// `Type` structs.
+fn extract_types(file_path: &Path) -> Result<Vec<Type>, Box<dyn std::error::Error>> {
+    let xml_strings = extract_xml_data(file_path)?;
+
+    let mut types: Vec<Type> = Vec::new();
+    for xml_string in xml_strings {
+        if xml_string.starts_with("<type") {
+            match from_str::<Type>(&xml_string) {
+                Ok(type_data) => types.push(type_data),
+                Err(e) => return Err(format!("Fehler beim Parsen von Type: {}", e).into()),
+            }
+        }
+    }
+
+    Ok(types)
+}
+
+/// Extracts `SpawnableType` elements from a given XML file.
+///
+/// This function reads the content of the specified XML file and extracts elements
+/// of type `<type>`. It uses the `extract_xml_data` function to get the raw XML strings
+/// and then parses each string into a `SpawnableType` struct. The function returns a vector
+/// of `SpawnableType` structs.
+fn extract_cfgspawnabletypes(
+    file_path: &Path,
+) -> Result<Vec<SpawnableType>, Box<dyn std::error::Error>> {
+    let xml_strings = extract_xml_data(file_path)?;
+
+    let mut spawnable_types: Vec<SpawnableType> = Vec::new();
+    for xml_string in xml_strings {
+        if xml_string.starts_with("<type") {
+            match from_str::<SpawnableType>(&xml_string) {
+                Ok(type_data) => spawnable_types.push(type_data),
+                Err(e) => return Err(format!("Fehler beim Parsen von SpawnableType: {}", e).into()),
+            }
+        }
+    }
+
+    Ok(spawnable_types)
+}
+
+/// Extracts `Event` elements from a given XML file.
+///
+/// This function reads the content of the specified XML file and extracts elements
+/// of type `<event>`. It uses the `extract_xml_data` function to get the raw XML strings
+/// and then parses each string into an `Event` struct. The function returns a vector
+/// of `Event` structs.
+fn extract_events(file_path: &Path) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
+    let xml_strings = extract_xml_data(file_path)?;
+
+    let mut events: Vec<Event> = Vec::new();
+    for xml_string in xml_strings {
+        if xml_string.starts_with("<event") {
+            match from_str::<Event>(&xml_string) {
+                Ok(event_data) => events.push(event_data),
+                Err(e) => return Err(format!("Fehler beim Parsen von Event: {}", e).into()),
+            }
+        }
+    }
+
+    Ok(events)
+}
+
+/// A type alias for the result of an analysis operation.
+///
+/// This type alias represents the result of an analysis operation that may return
+/// vectors of `Type`, `SpawnableType`, and `Event` structs. Each of these vectors
+/// is optional, meaning that the analysis may return any combination of these types
+/// or none at all. If an error occurs during the analysis, it will return an error
+/// boxed as `Box<dyn std::error::Error>`.
+type AnalyzeResult = Result<
+    (
+        Option<Vec<Type>>,
+        Option<Vec<SpawnableType>>,
+        Option<Vec<Event>>,
+    ),
+    Box<dyn std::error::Error>,
+>;
+
+/// Analyzes a folder for XML files containing `Type`, `SpawnableType`, and `Event` elements.
+///
+/// This function searches the specified folder for XML files that contain `Type`, `SpawnableType`,
+/// and `Event` elements. It processes each file accordingly and extracts the relevant data into
+/// vectors. The function returns a tuple containing optional vectors of `Type`, `SpawnableType`,
+/// and `Event` structs.
+pub fn analyze_types_folder(folder_path: &Path) -> AnalyzeResult {
+    let mut types = Vec::new();
+    let mut spawnable_types = Vec::new();
+    let mut events = Vec::new();
+
+    info!("Durchsuche Ordner: {}", folder_path.display());
+
+    for entry in read_dir(folder_path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            let file_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+
+            eprintln!("Gefundene Datei: {}", file_name);
+
+            if file_name.contains("types") && !file_name.contains("spawnable") {
+                eprintln!("Verarbeite types datei");
+                types = extract_types(&path)?;
+                eprintln!("Gefundene Types: {}", types.len());
+            } else if file_name.contains("spawnabletypes") {
+                eprintln!("Verarbeite spawnabletypes datei");
+                spawnable_types = extract_cfgspawnabletypes(&path)?;
+                eprintln!("Gefundene SpawnableTypes: {}", spawnable_types.len());
+            } else if file_name.contains("events") {
+                eprintln!("Verarbeite events datei");
+                events = extract_events(&path)?;
+                eprintln!("Gefundene Events: {}", events.len());
+            }
+        }
+    }
+
+    Ok((Some(types), Some(spawnable_types), Some(events)))
+}
+
+/// Retrieves the map name from the `serverDZ.cfg` file in the specified working directory.
+///
+/// This function searches for the `serverDZ.cfg` file in the given working directory and
+/// extracts the map name using a regular expression. The map name is expected to be in the
+/// format `word.word` (e.g., `chernarusplus.chernarus`). If the file is not found or the
+/// map name cannot be extracted, an error is returned.
+pub fn get_map_name(workdir: &str) -> Result<String, ModError> {
+    let cfg_path = Path::new(workdir).join("serverDZ.cfg");
+
+    if !cfg_path.is_file() {
+        return Err(ModError::NotFound);
+    }
+
+    let mut file = File::open(cfg_path).map_err(|_| ModError::NotFound)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .map_err(|_| ModError::NotFound)?;
+
+    let re = Regex::new(r"(\w+\.\w+)").unwrap();
+
+    re.captures(&contents)
+        .map(|cap| cap[1].to_string())
+        .ok_or(ModError::NotFound)
+}
+
+/// Writes serialized data to an XML file with proper formatting.
+///
+/// This function takes a reference to serializable data and a file path, serializes the data
+/// to an XML string, and writes it to the specified file. The XML content is formatted based
+/// on the root element (`<types>`, `<spawnabletypes>`, or `<events>`). The function also writes
+/// the XML declaration at the beginning of the file.
+fn write_to_file<T>(data: &T, file_path: &Path) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: Serialize + std::fmt::Debug,
+{
+    let mut file = File::create(file_path)?;
+    file.write_all(b"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n")?;
+
+    let xml = to_string(&data)?;
+
+    let formatted = if xml.contains("<types>") {
+        format_types(&xml)
+    } else if xml.contains("<spawnabletypes>") {
+        format_spawnabletypes(&xml)
+    } else {
+        format_events(&xml)
+    };
+
+    file.write_all(formatted.as_bytes())?;
+    Ok(())
+}
+
+/// Formats the XML string for `Type` elements with proper indentation and line breaks.
+///
+/// This function takes an XML string containing `<types>` and `<type>` elements and formats it
+/// with appropriate indentation and line breaks to improve readability. It ensures that each
+/// element and its sub-elements are properly indented and separated by new lines.
+fn format_types(xml: &str) -> String {
+    xml.replace("<types>", "<types>\n")
+        .replace("<type ", "\t<type ")
+        .replace("><nominal>", ">\n\t\t<nominal>")
+        .replace("</nominal><", "</nominal>\n\t\t<")
+        .replace("</lifetime><", "</lifetime>\n\t\t<")
+        .replace("</restock><", "</restock>\n\t\t<")
+        .replace("</min><", "</min>\n\t\t<")
+        .replace("</quantmin><", "</quantmin>\n\t\t<")
+        .replace("</quantmax><", "</quantmax>\n\t\t<")
+        .replace("</cost><", "</cost>\n\t\t<")
+        .replace("/><flags", "/>\n\t\t<flags")
+        .replace("/><category", "/>\n\t\t<category")
+        .replace("/><usage", "/>\n\t\t<usage")
+        .replace("/><tag", "/>\n\t\t<tag")
+        .replace("/><value", "/>\n\t\t<value")
+        .replace("</type>", "\n\t</type>\n")
+        .replace("</types>", "</types>\n")
+}
+
+/// Formats the XML string for `SpawnableType` elements with proper indentation and line breaks.
+///
+/// This function takes an XML string containing `<spawnabletypes>` and `<type>` elements and formats it
+/// with appropriate indentation and line breaks to improve readability. It ensures that each
+/// element and its sub-elements are properly indented and separated by new lines.
+fn format_spawnabletypes(xml: &str) -> String {
+    xml.replace("<spawnabletypes>", "<spawnabletypes>\n")
+        .replace("<type ", "\t<type ")
+        .replace("><attachments", ">\n\t\t<attachments")
+        .replace("/></attachments>", "/>\n\t\t</attachments>")
+        .replace("<item", "\n\t\t\t<item")
+        .replace("</type>", "\n\t</type>\n")
+        .replace("</spawnabletypes>", "</spawnabletypes>\n")
+}
+
+/// Formats the XML string for `Event` elements with proper indentation and line breaks.
+///
+/// This function takes an XML string containing `<events>` and `<event>` elements and formats it
+/// with appropriate indentation and line breaks to improve readability. It ensures that each
+/// element and its sub-elements are properly indented and separated by new lines.
+fn format_events(xml: &str) -> String {
+    xml.replace("<events>", "<events>\n")
+        .replace("<event ", "\t<event ")
+        .replace("><nominal>", ">\n\t\t<nominal>")
+        .replace("</nominal><", "</nominal>\n\t\t<")
+        .replace("</lifetime><", "</lifetime>\n\t\t<")
+        .replace("</restock><", "</restock>\n\t\t<")
+        .replace("</min><", "</min>\n\t\t<")
+        .replace("</max><", "</max>\n\t\t<")
+        .replace("</saferadius><", "</saferadius>\n\t\t<")
+        .replace("</distanceraduis><", "</distanceraduis>\n\t\t<")
+        .replace("</cleanupradius><", "</cleanupradius>\n\t\t<")
+        .replace("/><flags", "/>\n\t\t<flags")
+        .replace("/><position", "/>\n\t\t<position")
+        .replace("</position><", "</position>\n\t\t<")
+        .replace("</limit><", "</limit>\n\t\t<")
+        .replace("</active><", "</active>\n\t\t<")
+        .replace("</children>", "\n\t\t</children>")
+        .replace("><child", ">\n\t\t\t<child")
+        .replace("/><child", "/>\n\t\t\t<child")
+        .replace("</event>", "\n\t</event>\n")
+        .replace("</events>", "</events>\n")
+}
+
+/// Saves extracted data (`Type`, `SpawnableType`, and `Event` elements) to XML files.
+///
+/// This function takes the extracted data and saves it to XML files in a specified directory
+/// structure. The files are named based on the provided `mod_short_name` and are saved in a
+/// subdirectory under the specified `workdir` and `map_name`. The function creates the necessary
+/// directories if they do not exist.
+pub fn save_extracted_data(
+    workdir: &str,
+    mod_short_name: &str,
+    map_name: &str,
+    types: Vec<Type>,
+    spawnable_types: Vec<SpawnableType>,
+    events: Vec<Event>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let base_path = Path::new(workdir)
+        .join("mpmissions")
+        .join(map_name)
+        .join(format!("{}_ce", mod_short_name));
+    create_dir_all(&base_path)?;
+
+    if !types.is_empty() {
+        let types_wrapper = TypesWrapper { types };
+        let types_file_path = base_path.join(format!("{}_types.xml", mod_short_name));
+        write_to_file(&types_wrapper, &types_file_path)?;
+    }
+
+    if !spawnable_types.is_empty() {
+        let spawnable_types_wrapper = SpawnableTypesWrapper { spawnable_types };
+        let spawnable_types_file_path =
+            base_path.join(format!("{}_spawnabletypes.xml", mod_short_name));
+        write_to_file(&spawnable_types_wrapper, &spawnable_types_file_path)?;
+    }
+
+    if !events.is_empty() {
+        let events_wrapper = EventsWrapper { events };
+        let events_file_path = base_path.join(format!("{}_events.xml", mod_short_name));
+        write_to_file(&events_wrapper, &events_file_path)?;
+    }
+
+    Ok(())
+}
+
+/// Retrieves the list of installed mods from the given profile.
+///
+/// This function takes a `Profile` as input and returns a list of installed mods
+/// associated with that profile. If the operation is successful, it returns a `Vec<Value>`
+/// containing the installed mods. If an error occurs, a `ModError` is returned.
+pub fn get_installed_mod_list(profile: Profile) -> Result<Vec<Value>, ModError> {
+    let installed_mods = profile.installed_mods;
+
+    Ok(installed_mods)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::{self, File};
+    use std::io::Write;
+
+    #[test]
+    fn test_copy_dir() {
+        let temp_dir = std::env::temp_dir();
+        let source_dir = temp_dir.join("source_dir");
+        let target_dir = temp_dir.join("target_dir");
+
+        fs::create_dir_all(&source_dir).unwrap();
+        let mut file1 = File::create(source_dir.join("file1.txt")).unwrap();
+        writeln!(file1, "This is a test file.").unwrap();
+
+        let sub_dir = source_dir.join("sub_dir");
+        fs::create_dir_all(&sub_dir).unwrap();
+        let mut file2 = File::create(sub_dir.join("file2.txt")).unwrap();
+        writeln!(file2, "This is another test file.").unwrap();
+
+        match copy_dir(&source_dir, &target_dir) {
+            Ok(_) => {
+                assert!(target_dir.exists());
+                assert!(target_dir.join("file1.txt").exists());
+                assert!(target_dir.join("sub_dir").exists());
+                assert!(target_dir.join("sub_dir/file2.txt").exists());
+            }
+            Err(e) => panic!("Error copying directory: {:?}", e),
+        }
+
+        fs::remove_dir_all(&source_dir).unwrap();
+        fs::remove_dir_all(&target_dir).unwrap();
+    }
+}
