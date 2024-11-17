@@ -24,25 +24,48 @@ use std::{
 pub fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
     match create_dir_all(target_dir) {
         Ok(_) => (),
-        Err(_) => return Err(ModError::CreateDirError),
+        Err(e) => {
+            error!("Failed to create directory {}: {}", target_dir.display(), e);
+            return Err(ModError::CreateDirError);
+        }
     }
 
     const LARGE_FILE_THRESHOLD: u64 = 100 * 1024 * 1024;
     const CHUNK_SIZE: usize = 8 * 1024 * 1024;
 
-    for entry in source_dir.read_dir().map_err(|_| ModError::CopyFileError)? {
-        let entry = entry.map_err(|_| ModError::CopyFileError)?;
+    for entry in source_dir.read_dir().map_err(|e| {
+        error!("Failed to read directory {}: {}", source_dir.display(), e);
+        ModError::CopyFileError
+    })? {
+        let entry = entry.map_err(|e| {
+            error!("Failed to read directory entry: {}", e);
+            ModError::CopyFileError
+        })?;
         let source_path = entry.path();
         let target_path = target_dir.join(source_path.strip_prefix(source_dir).unwrap());
 
         if entry
             .file_type()
-            .map_err(|_| ModError::CopyFileError)?
+            .map_err(|e| {
+                error!(
+                    "Failed to get file type for {}: {}",
+                    source_path.display(),
+                    e
+                );
+                ModError::CopyFileError
+            })?
             .is_dir()
         {
             copy_dir(&source_path, &target_path)?;
         } else {
-            let metadata = entry.metadata().map_err(|_| ModError::CopyFileError)?;
+            let metadata = entry.metadata().map_err(|e| {
+                error!(
+                    "Failed to get metadata for {}: {}",
+                    source_path.display(),
+                    e
+                );
+                ModError::CopyFileError
+            })?;
             let file_size = metadata.len();
 
             if file_size > LARGE_FILE_THRESHOLD {
@@ -542,7 +565,7 @@ pub fn save_extracted_data(
     if !spawnable_types.is_empty() {
         let spawnable_types_wrapper = SpawnableTypesWrapper { spawnable_types };
         let spawnable_types_file_path =
-            base_path.join(format!("{}_spawnabletypes.xml", mod_short_name));
+            base_path.join(format!("{}_cfgspawnabletypes.xml", mod_short_name));
         write_to_file(&spawnable_types_wrapper, &spawnable_types_file_path)?;
     }
 
@@ -608,7 +631,7 @@ pub fn update_cfgeconomy(
 
     if !spawnable_types.is_empty() {
         new_content.push(format!(
-            "\t\t<file name=\"{}_spawnabletypes.xml\" type=\"spawnabletypes\" />",
+            "\t\t<file name=\"{}_cfgspawnabletypes.xml\" type=\"spawnabletypes\" />",
             mod_short_name
         ));
     }

@@ -231,17 +231,32 @@ pub fn update_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> 
     }
 
     info!("Starting mod updates...");
+    info!("Workshop path: {}", workshop_path);
+    info!("Workdir path: {}", workdir_path);
 
     for mod_entry in installed_mods {
         let mod_name = mod_entry.as_str().unwrap().to_string();
         let mod_workdir_path = Path::new(&workdir_path).join(&mod_name);
-        let mod_workshop_path = Path::new(&workshop_path).join(mod_name.trim_start_matches('@'));
+        let mod_workshop_path = Path::new(&workshop_path).join(&mod_name);
 
-        // Lösche den Mod aus dem Workdir
+        if !mod_workshop_path.exists() {
+            error!(
+                "Workshop path does not exist for {}: {}",
+                mod_name,
+                mod_workshop_path.display()
+            );
+            continue;
+        }
+
         if mod_workdir_path.exists() {
             info!("Removing {} from workdir", mod_name);
             if let Err(e) = std::fs::remove_dir_all(&mod_workdir_path) {
-                error!("Failed to remove {} from workdir: {}", mod_name, e);
+                error!(
+                    "Failed to remove {} from workdir at {}: {}",
+                    mod_name,
+                    mod_workdir_path.display(),
+                    e
+                );
                 continue;
             }
         }
@@ -253,60 +268,104 @@ pub fn update_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> 
             let mod_workdir_path = mod_workdir_path.clone();
             let workdir_path = workdir_path.clone();
             move || {
-                if let Err(e) = copy_dir(&mod_workshop_path, &mod_workdir_path) {
-                    error!("Failed to update {} to workdir: {}", mod_name, e);
-                    return;
-                }
+                info!(
+                    "Starting copy process for {}:\nFrom: {}\nTo: {}",
+                    mod_name,
+                    mod_workshop_path.display(),
+                    mod_workdir_path.display()
+                );
 
-                if let Some(types_folder_path) = find_types_folder(&mod_workshop_path) {
-                    match analyze_types_folder(&types_folder_path) {
-                        Ok((Some(types), Some(spawnable_types), Some(events))) => {
-                            if !types.is_empty()
-                                || !spawnable_types.is_empty()
-                                || !events.is_empty()
-                            {
-                                let mod_short_name = Mod {
-                                    name: mod_name.clone(),
+                match copy_dir(&mod_workshop_path, &mod_workdir_path) {
+                    Ok(_) => {
+                        info!("Successfully copied {} to workdir", mod_name);
+
+                        // Überprüfe und aktualisiere types
+                        if let Some(types_folder_path) = find_types_folder(&mod_workshop_path) {
+                            info!(
+                                "Found types folder for {}: {}",
+                                mod_name,
+                                types_folder_path.display()
+                            );
+
+                            match analyze_types_folder(&types_folder_path) {
+                                Ok((Some(types), Some(spawnable_types), Some(events))) => {
+                                    if !types.is_empty()
+                                        || !spawnable_types.is_empty()
+                                        || !events.is_empty()
+                                    {
+                                        let mod_short_name = Mod {
+                                            name: mod_name.clone(),
+                                        }
+                                        .short_name();
+
+                                        match get_map_name(&workdir_path) {
+                                            Ok(map_name) => {
+                                                info!(
+                                                    "Updating types data for {} ({})",
+                                                    mod_name, mod_short_name
+                                                );
+
+                                                if let Err(e) = save_extracted_data(
+                                                    &workdir_path,
+                                                    &mod_short_name,
+                                                    &map_name,
+                                                    types.clone(),
+                                                    spawnable_types.clone(),
+                                                    events.clone(),
+                                                ) {
+                                                    error!(
+                                                        "Error updating types data for {}: {}",
+                                                        mod_name, e
+                                                    );
+                                                }
+
+                                                if let Err(e) = update_cfgeconomy(
+                                                    &workdir_path,
+                                                    &mod_short_name,
+                                                    types,
+                                                    spawnable_types,
+                                                    events,
+                                                ) {
+                                                    error!(
+                                                        "Error updating cfgeconomy.xml for {}: {}",
+                                                        mod_name, e
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "Failed to get map name for {}: {:?}",
+                                                    mod_name, e
+                                                );
+                                            }
+                                        }
+                                    } else {
+                                        info!("No types data found for {}", mod_name);
+                                    }
                                 }
-                                .short_name();
-
-                                if let Ok(map_name) = get_map_name(&workdir_path) {
-                                    if let Err(e) = save_extracted_data(
-                                        &workdir_path,
-                                        &mod_short_name,
-                                        &map_name,
-                                        types.clone(),
-                                        spawnable_types.clone(),
-                                        events.clone(),
-                                    ) {
-                                        error!("Error updating types data for {}: {}", mod_name, e);
-                                    }
-
-                                    if let Err(e) = update_cfgeconomy(
-                                        &workdir_path,
-                                        &mod_short_name,
-                                        types,
-                                        spawnable_types,
-                                        events,
-                                    ) {
-                                        error!(
-                                            "Error updating cfgeconomy.xml for {}: {}",
-                                            mod_name, e
-                                        );
-                                    }
+                                Ok(_) => {
+                                    error!("Incomplete types data for mod: {}", mod_name);
+                                }
+                                Err(e) => {
+                                    error!("Error analyzing types for mod {}: {}", mod_name, e);
                                 }
                             }
+                        } else {
+                            info!("No types folder found for {}", mod_name);
                         }
-                        Ok(_) => {
-                            error!("Incomplete types data for mod: {}", mod_name);
-                        }
-                        Err(e) => {
-                            error!("Error analyzing types for mod {}: {}", mod_name, e);
-                        }
+
+                        info!("Successfully updated {}", mod_name);
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to update {} to workdir.\nSource: {}\nTarget: {}\nError: {:?}",
+                            mod_name,
+                            mod_workshop_path.display(),
+                            mod_workdir_path.display(),
+                            e
+                        );
                     }
                 }
-
-                info!("Successfully updated {}", mod_name);
             }
         });
     }
