@@ -1,7 +1,7 @@
 use crate::{
     utils::{get_config_path, get_profile},
-    Event, EventsWrapper, ModError, Profile, SpawnableType, SpawnableTypesWrapper, Type,
-    TypesWrapper,
+    Event, EventsWrapper, ModChecksum, ModError, Profile, SpawnableType, SpawnableTypesWrapper,
+    ThreadPool, Type, TypesWrapper,
 };
 use log::{error, info};
 use quick_xml::se::to_string;
@@ -9,11 +9,15 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
 use serde_xml_rs::from_str;
+use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
     fs::{copy, create_dir_all, read_dir, read_to_string, File},
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
+use walkdir::WalkDir;
 
 /// Recursively copies the contents of one directory to another with optimized handling of large files.
 ///
@@ -41,21 +45,20 @@ pub fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
             error!("Failed to read directory entry: {}", e);
             ModError::CopyFileError
         })?;
+
         let source_path = entry.path();
         let target_path = target_dir.join(source_path.strip_prefix(source_dir).unwrap());
 
-        if entry
-            .file_type()
-            .map_err(|e| {
-                error!(
-                    "Failed to get file type for {}: {}",
-                    source_path.display(),
-                    e
-                );
-                ModError::CopyFileError
-            })?
-            .is_dir()
-        {
+        let file_type = entry.file_type().map_err(|e| {
+            error!(
+                "Failed to get file type for {}: {}",
+                source_path.display(),
+                e
+            );
+            ModError::CopyFileError
+        })?;
+
+        if file_type.is_dir() {
             copy_dir(&source_path, &target_path)?;
         } else {
             let metadata = entry.metadata().map_err(|e| {
@@ -66,6 +69,7 @@ pub fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
                 );
                 ModError::CopyFileError
             })?;
+
             let file_size = metadata.len();
 
             if file_size > LARGE_FILE_THRESHOLD {
@@ -123,6 +127,162 @@ fn copy_large_file(source: &Path, target: &Path, chunk_size: usize) -> std::io::
 
     target_file.flush()?;
     Ok(())
+}
+
+/// Calculates checksums for all files in a mod directory using parallel processing.
+///
+/// This function walks through the mod directory and calculates checksums for all files,
+/// using a thread pool for parallel processing. It handles files differently based on their size:
+/// - Files > 1MB: Full SHA256 hash calculation
+/// - Files ≤ 1MB: Only size comparison ("small_file" marker)
+fn calculate_mod_checksums(
+    mod_path: &Path,
+    pool: &ThreadPool,
+) -> Result<Vec<ModChecksum>, std::io::Error> {
+    let checksums_mutex = Arc::new(Mutex::new(Vec::new()));
+    let error_mutex = Arc::new(Mutex::new(None));
+
+    let files: Vec<_> = WalkDir::new(mod_path)
+        .min_depth(1)
+        .into_iter()
+        .filter_entry(|e| !is_ignored_file(e))
+        .filter_map(|entry| entry.ok())
+        .filter(|e| e.file_type().is_file())
+        .collect();
+
+    info!("Found {} files to check", files.len());
+
+    for entry in files {
+        let checksums = Arc::clone(&checksums_mutex);
+        let errors = Arc::clone(&error_mutex);
+        let path = entry.path().to_path_buf();
+        let mod_path = mod_path.to_path_buf();
+
+        pool.execute(move || {
+            let result: Result<(), std::io::Error> = (|| {
+                let metadata = entry.metadata()?;
+                let size = metadata.len();
+                let hash = if size > 1024 * 1024 {
+                    calculate_file_hash(&path)?
+                } else {
+                    "small_file".to_string()
+                };
+
+                let rel_path = path
+                    .strip_prefix(&mod_path)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?
+                    .to_path_buf();
+
+                let mut checksums_guard = checksums.lock().unwrap();
+                checksums_guard.push(ModChecksum {
+                    path: rel_path,
+                    size,
+                    hash,
+                });
+                Ok(())
+            })();
+
+            if let Err(e) = result {
+                let mut error_guard = errors.lock().unwrap();
+                *error_guard = Some(e);
+            }
+        });
+    }
+
+    pool.wait();
+
+    let error_guard = error_mutex.lock().unwrap();
+    if let Some(e) = &*error_guard {
+        return Err(std::io::Error::new(e.kind(), e.to_string()));
+    }
+    drop(error_guard);
+
+    let checksums_guard = checksums_mutex.lock().unwrap();
+    let result = checksums_guard.clone();
+    Ok(result)
+}
+
+/// Calculates the SHA256 hash of a file.
+///
+/// Reads the file in 1MB chunks and calculates a SHA256 hash of its contents.
+/// This method is memory-efficient as it processes the file in chunks rather
+/// than loading it entirely into memory.
+fn calculate_file_hash(path: &Path) -> Result<String, std::io::Error> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0; 1024 * 1024];
+
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        hasher.update(&buffer[..bytes_read]);
+    }
+
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Determines if a file should be ignored during mod comparison.
+///
+/// Filters out system files and hidden files that should not be included
+/// in mod comparison calculations. Currently ignores:
+/// - Hidden files (starting with '.')
+/// - Windows system files ('desktop.ini', 'thumbs.db')
+fn is_ignored_file(entry: &walkdir::DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with('.') || s == "desktop.ini" || s == "thumbs.db")
+        .unwrap_or(false)
+}
+
+/// Compares mod versions between workshop and workdir by checking file checksums.
+///
+/// This function performs a detailed comparison of mod files between the workshop and workdir
+/// directories using parallel checksum calculation. It checks for:
+/// - Different number of files
+/// - Missing files
+/// - File size differences
+/// - Content differences (via hash comparison)
+pub fn compare_mod_versions(
+    workshop_path: &Path,
+    workdir_path: &Path,
+    pool: &ThreadPool,
+) -> Result<bool, std::io::Error> {
+    info!("Calculating checksums for workshop version...");
+    let workshop_checksums = calculate_mod_checksums(workshop_path, pool)?;
+
+    info!("Calculating checksums for installed version...");
+    let workdir_checksums = calculate_mod_checksums(workdir_path, pool)?;
+
+    if workshop_checksums.len() != workdir_checksums.len() {
+        info!("Different number of files detected");
+        return Ok(false);
+    }
+
+    let workdir_map: HashMap<_, _> = workdir_checksums
+        .into_iter()
+        .map(|c| (c.path, (c.size, c.hash)))
+        .collect();
+
+    for workshop_check in workshop_checksums {
+        if let Some((size, hash)) = workdir_map.get(&workshop_check.path) {
+            if *size != workshop_check.size || *hash != workshop_check.hash {
+                info!(
+                    "File {} has different size or hash",
+                    workshop_check.path.display()
+                );
+                return Ok(false);
+            }
+        } else {
+            info!("Missing file in workdir: {}", workshop_check.path.display());
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
 /// Searches for a subdirectory named "keys" in the specified mod directory.

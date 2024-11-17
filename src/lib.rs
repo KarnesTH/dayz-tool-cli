@@ -1,4 +1,5 @@
 use std::{
+    path::PathBuf,
     sync::{
         atomic::{AtomicUsize, Ordering},
         mpsc, Arc, Mutex,
@@ -397,4 +398,11 @@ pub struct SpawnableTypesWrapper {
 pub struct EventsWrapper {
     #[serde(rename = "event")]
     pub events: Vec<Event>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModChecksum {
+    pub path: PathBuf,
+    pub size: u64,
+    pub hash: String,
 }
