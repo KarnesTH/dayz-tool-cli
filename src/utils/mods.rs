@@ -3,7 +3,7 @@ use crate::{
     Event, EventsWrapper, ModError, Profile, SpawnableType, SpawnableTypesWrapper, Type,
     TypesWrapper,
 };
-use log::info;
+use log::{error, info};
 use quick_xml::se::to_string;
 use regex::Regex;
 use serde::Serialize;
@@ -15,38 +15,90 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Recursively copies the contents of one directory to another.
+/// Recursively copies the contents of one directory to another with optimized handling of large files.
 ///
 /// This function takes a source directory and a target directory as input and
 /// recursively copies all files and subdirectories from the source to the target.
-/// If the target directory does not exist, it will be created. If any error occurs
-/// during the creation of the target directory or the copying of files, an appropriate
-/// `ModError` will be returned.
+/// For files larger than 100MB, it uses a chunked copying approach to optimize memory usage
+/// and provide progress tracking.
 pub fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
     match create_dir_all(target_dir) {
-        Ok(dir) => dir,
-        Err(_) => {
-            return Err(ModError::CreateDirError);
-        }
+        Ok(_) => (),
+        Err(_) => return Err(ModError::CreateDirError),
     }
 
-    for entry in source_dir.read_dir().unwrap() {
-        let entry = entry.unwrap();
+    const LARGE_FILE_THRESHOLD: u64 = 100 * 1024 * 1024;
+    const CHUNK_SIZE: usize = 8 * 1024 * 1024;
+
+    for entry in source_dir.read_dir().map_err(|_| ModError::CopyFileError)? {
+        let entry = entry.map_err(|_| ModError::CopyFileError)?;
         let source_path = entry.path();
         let target_path = target_dir.join(source_path.strip_prefix(source_dir).unwrap());
 
-        if entry.file_type().unwrap().is_dir() {
+        if entry
+            .file_type()
+            .map_err(|_| ModError::CopyFileError)?
+            .is_dir()
+        {
             copy_dir(&source_path, &target_path)?;
         } else {
-            match copy(&source_path, &target_path) {
-                Ok(_) => {}
-                Err(_) => {
-                    return Err(ModError::CopyFileError);
-                }
+            let metadata = entry.metadata().map_err(|_| ModError::CopyFileError)?;
+            let file_size = metadata.len();
+
+            if file_size > LARGE_FILE_THRESHOLD {
+                info!(
+                    "Copying large file ({} MB): {}",
+                    file_size / (1024 * 1024),
+                    source_path.display()
+                );
+                copy_large_file(&source_path, &target_path, CHUNK_SIZE).map_err(|e| {
+                    error!("Failed to copy large file {}: {}", source_path.display(), e);
+                    ModError::CopyFileError
+                })?;
+            } else {
+                copy(&source_path, &target_path).map_err(|e| {
+                    error!("Failed to copy file {}: {}", source_path.display(), e);
+                    ModError::CopyFileError
+                })?;
             }
         }
     }
 
+    Ok(())
+}
+
+/// Copies a large file in chunks with progress tracking.
+///
+/// This function implements a memory-efficient copying mechanism for large files
+/// by reading and writing the file in chunks rather than loading it entirely into memory.
+/// It also provides progress updates through logging.
+fn copy_large_file(source: &Path, target: &Path, chunk_size: usize) -> std::io::Result<()> {
+    let mut source_file = File::open(source)?;
+    let mut target_file = File::create(target)?;
+    let file_size = source_file.metadata()?.len();
+    let mut bytes_copied = 0u64;
+    let mut buffer = vec![0; chunk_size];
+
+    while bytes_copied < file_size {
+        let bytes_read = source_file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        target_file.write_all(&buffer[..bytes_read])?;
+        bytes_copied += bytes_read as u64;
+
+        if bytes_copied % (50 * 1024 * 1024) == 0 {
+            info!(
+                "Progress: {:.1}% ({}/{} MB)",
+                (bytes_copied as f64 / file_size as f64) * 100.0,
+                bytes_copied / (1024 * 1024),
+                file_size / (1024 * 1024)
+            );
+        }
+    }
+
+    target_file.flush()?;
     Ok(())
 }
 

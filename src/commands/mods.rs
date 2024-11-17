@@ -211,6 +211,111 @@ pub fn list_installed_mods(profile: Profile) -> Result<(), ModError> {
     Ok(())
 }
 
+/// Updates installed mods by replacing their directories and types configurations.
+///
+/// This function performs the following operations for each installed mod:
+/// 1. Removes the existing mod directory from the workdir
+/// 2. Copies the latest version from the workshop directory
+/// 3. Updates types configurations if changes are detected
+///
+/// The function uses a thread pool for parallel processing of mods to improve performance.
+/// All operations are logged for tracking and debugging purposes.
+pub fn update_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> {
+    let installed_mods = get_installed_mod_list(profile.clone()).unwrap();
+    let workdir_path = profile.workdir_path.clone();
+    let workshop_path = profile.workshop_path.clone();
+
+    if installed_mods.is_empty() {
+        info!("No mods installed.");
+        return Ok(());
+    }
+
+    info!("Starting mod updates...");
+
+    for mod_entry in installed_mods {
+        let mod_name = mod_entry.as_str().unwrap().to_string();
+        let mod_workdir_path = Path::new(&workdir_path).join(&mod_name);
+        let mod_workshop_path = Path::new(&workshop_path).join(mod_name.trim_start_matches('@'));
+
+        // Lösche den Mod aus dem Workdir
+        if mod_workdir_path.exists() {
+            info!("Removing {} from workdir", mod_name);
+            if let Err(e) = std::fs::remove_dir_all(&mod_workdir_path) {
+                error!("Failed to remove {} from workdir: {}", mod_name, e);
+                continue;
+            }
+        }
+
+        info!("Updating {} from workshop", mod_name);
+        pool.execute({
+            let mod_name = mod_name.clone();
+            let mod_workshop_path = mod_workshop_path.clone();
+            let mod_workdir_path = mod_workdir_path.clone();
+            let workdir_path = workdir_path.clone();
+            move || {
+                if let Err(e) = copy_dir(&mod_workshop_path, &mod_workdir_path) {
+                    error!("Failed to update {} to workdir: {}", mod_name, e);
+                    return;
+                }
+
+                if let Some(types_folder_path) = find_types_folder(&mod_workshop_path) {
+                    match analyze_types_folder(&types_folder_path) {
+                        Ok((Some(types), Some(spawnable_types), Some(events))) => {
+                            if !types.is_empty()
+                                || !spawnable_types.is_empty()
+                                || !events.is_empty()
+                            {
+                                let mod_short_name = Mod {
+                                    name: mod_name.clone(),
+                                }
+                                .short_name();
+
+                                if let Ok(map_name) = get_map_name(&workdir_path) {
+                                    if let Err(e) = save_extracted_data(
+                                        &workdir_path,
+                                        &mod_short_name,
+                                        &map_name,
+                                        types.clone(),
+                                        spawnable_types.clone(),
+                                        events.clone(),
+                                    ) {
+                                        error!("Error updating types data for {}: {}", mod_name, e);
+                                    }
+
+                                    if let Err(e) = update_cfgeconomy(
+                                        &workdir_path,
+                                        &mod_short_name,
+                                        types,
+                                        spawnable_types,
+                                        events,
+                                    ) {
+                                        error!(
+                                            "Error updating cfgeconomy.xml for {}: {}",
+                                            mod_name, e
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Ok(_) => {
+                            error!("Incomplete types data for mod: {}", mod_name);
+                        }
+                        Err(e) => {
+                            error!("Error analyzing types for mod {}: {}", mod_name, e);
+                        }
+                    }
+                }
+
+                info!("Successfully updated {}", mod_name);
+            }
+        });
+    }
+
+    pool.wait();
+    info!("All mod updates completed.");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
