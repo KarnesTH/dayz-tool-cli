@@ -1,43 +1,47 @@
-# DayZ Tool CLI
+# 🎮 DayZ Tool CLI
 
 A command-line tool for simplifying DayZ server administration.
 
-## Features
+## ✨ Features
 
-* **Automatic Mod Installation:** Easily install mods from your Steam Workshop directory to your server.
-* **GUID Generator:**  Generate GUIDs from Steam64 IDs for use in your server's whitelist.
-* **Day/Night Cycle Calculator:** Calculate the current time (day or night) on your DayZ server.
-* **(More features to be added soon!)**
+* 🔄 **Automatic Mod Installation:** Easily install mods from your Steam Workshop directory to your server.
+* 🔑 **GUID Generator:** Generate GUIDs from Steam64 IDs for use in your server's whitelist.
+* ⏰ **Day/Night Cycle Calculator:** Calculate the current time (day or night) on your DayZ server.
+* 🚀 **(More features to be added soon!)**
 
-## Installation
+## 📥 Installation
 
-1. **Install Rust and Cargo:** If you don't have them already, follow the instructions at [https://www.rust-lang.org/](https://www.rust-lang.org/).
-2. **Clone this repository:**
+1. 🦀 **Install Rust and Cargo:** If you don't have them already, follow the instructions at [https://www.rust-lang.org/](https://www.rust-lang.org/).
+2. 📂 **Clone this repository:**
    ```bash
    git clone https://github.com/KarnesTH/dayz-tool-cli.git
    ```
-3. **Navigate to the project directory:**
+3. 📁 **Navigate to the project directory:**
    ```bash
    cd dayz-tool-cli
    ```
-4. **Build and install the CLI:**
+4. 🔨 **Build and install the CLI:**
    ```bash
    cargo install --path .
    ```
 
-## Usage
+## 🛠️ Usage
 
 After installation, you can use the following commands:
 
-* **`dayz-tool-cli guid <steam64Id>`:** Generates a GUID from the given Steam64 ID.
-* **`dayz-tool-cli dnc -d <time>[h|min] -n <time>[h|min]`:** Calculates and displays the `serverTimeAcceleration` and `serverNightTimeAcceleration` settings for a DayZ server, based on the desired day and night lengths..
-* **`dayz-tool-cli mods [install|list|update]`:** Installs mods from your Steam Workshop directory to your server.
-* **(More commands to be added soon!)**
+* 🔑 **`dayz-tool-cli guid <steam64Id>`:** Generates a GUID from the given Steam64 ID.
+* ⏰ **`dayz-tool-cli dnc -d <time>[h|min] -n <time>[h|min]`:** Calculates and displays the `serverTimeAcceleration` and `serverNightTimeAcceleration` settings.
+* 🔄 **`dayz-tool-cli mods [install|list|update]`:** Installs mods from your Steam Workshop directory to your server.
+* 🚀 **(More commands to be added soon!)**
 
-## Configuration
+## ⚙️ Configuration
 
 The CLI uses a configuration file named `config.json` to store settings. By default, this file is located in the `.dayz-tool` directory in your home directory.
 
-## License
+## 📜 License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## ⚠️ Disclaimer
+
+This CLI tool is currently in development phase. To prevent potential data loss or file corruption, please ensure to create a backup of your files before using this tool.

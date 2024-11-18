@@ -8,7 +8,7 @@ use crate::{
     utils::{
         add_mods_to_profile, analyze_types_folder, compare_mod_versions, copy_dir, copy_keys,
         find_keys_folder, find_types_folder, get_installed_mod_list, get_map_name,
-        parse_startup_parameter, save_extracted_data, update_cfgeconomy,
+        parse_startup_parameter, remove_keys_for_mod, save_extracted_data, update_cfgeconomy,
     },
     Mod, ModError, Profile, ThreadPool, THREAD_POOL,
 };
@@ -360,6 +360,64 @@ pub fn update_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> 
 
     pool.wait();
     info!("All mod updates completed.");
+    Ok(())
+}
+
+pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> {
+    let installed_mods = get_installed_mod_list(profile.clone())?;
+    let installed_mods_names: Vec<String> = installed_mods
+        .into_iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+
+    if installed_mods_names.is_empty() {
+        info!("No mods installed.");
+        return Ok(());
+    }
+
+    let ans = MultiSelect::new("Select mods to uninstall:", installed_mods_names.clone()).prompt();
+
+    match ans {
+        Ok(selected_mods) => {
+            let map_name = get_map_name(&profile.workdir_path)?;
+
+            info!("Starting mod uninstalls...");
+
+            for mod_name in selected_mods {
+                pool.execute({
+                    let mod_name = mod_name.clone();
+                    let workdir_path = profile.workdir_path.clone();
+                    let map_name = map_name.clone();
+
+                    move || {
+                        let mod_path = Path::new(&workdir_path).join(&mod_name);
+
+                        if let Some(keys_folder) = find_keys_folder(&mod_path) {
+                            if let Err(e) = remove_keys_for_mod(&workdir_path, &keys_folder) {
+                                error!("Failed to remove keys for {}: {}", mod_name, e);
+                            }
+                        }
+
+                        let mod_short = Mod {
+                            name: mod_name.clone(),
+                        }
+                        .short_name();
+                        let types_path = Path::new(&workdir_path)
+                            .join("mpmissions")
+                            .join(&map_name)
+                            .join(mod_short);
+                        if let Err(e) = std::fs::remove_dir_all(types_path) {
+                            warn!("Could not remove types folder for {}: {}", mod_name, e);
+                        }
+                    }
+                });
+            }
+
+            pool.wait();
+        }
+        Err(_) => return Err(ModError::SelectError),
+    }
+
     Ok(())
 }
 

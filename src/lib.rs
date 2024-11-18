@@ -80,6 +80,8 @@ pub enum ModError {
     ParseError,
     #[error("Failed to find the path")]
     PathError,
+    #[error("Failed to remove file")]
+    RemoveFileError,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

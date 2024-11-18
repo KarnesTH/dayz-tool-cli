@@ -11,5 +11,5 @@ pub use log::init_logger;
 pub use mods::{
     analyze_types_folder, compare_mod_versions, copy_dir, copy_keys, find_keys_folder,
     find_types_folder, get_installed_mod_list, get_map_name, parse_startup_parameter,
-    save_extracted_data, update_cfgeconomy,
+    remove_keys_for_mod, save_extracted_data, update_cfgeconomy,
 };

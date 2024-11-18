@@ -12,7 +12,7 @@ use serde_xml_rs::from_str;
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
-    fs::{copy, create_dir_all, read_dir, read_to_string, File},
+    fs::{copy, create_dir_all, read_dir, read_to_string, remove_file, File},
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -807,6 +807,40 @@ pub fn update_cfgeconomy(
     lines.splice(end_idx..end_idx, new_content);
 
     std::fs::write(&file_path, lines.join("\n"))?;
+
+    Ok(())
+}
+
+pub fn remove_keys_for_mod(workdir: &str, mod_path: &Path) -> Result<(), ModError> {
+    let workdir_keys = Path::new(workdir).join("keys");
+    if !workdir_keys.exists() {
+        return Err(ModError::PathError);
+    }
+
+    if let Some(mod_keys_folder) = find_keys_folder(mod_path) {
+        for entry in read_dir(mod_keys_folder).unwrap() {
+            let entry = entry.unwrap();
+            let source_path = entry.path();
+
+            if source_path.is_file() && source_path.extension().map_or(false, |ext| ext == "bikey")
+            {
+                if let Some(key_name) = source_path.file_name() {
+                    let target_path = workdir_keys.join(key_name);
+                    if target_path.exists() {
+                        info!("Removing bikey: {}", key_name.to_string_lossy());
+                        if let Err(e) = remove_file(&target_path) {
+                            error!(
+                                "Failed to remove bikey {}: {}",
+                                key_name.to_string_lossy(),
+                                e
+                            );
+                            return Err(ModError::RemoveFileError);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Ok(())
 }
