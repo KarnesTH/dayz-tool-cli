@@ -27,6 +27,7 @@ A command-line tool for simplifying DayZ server administration.
 
 ## 🛠️ Commands
 
+```plaintext
 dayz-tool-cli
 ├── mods                   # Mod management
 │   ├── install            # Install mods from workshop
@@ -41,6 +42,7 @@ dayz-tool-cli
 │       └── -n <time>      # Night length [h|min]
 │
 └── 🚀 More commands coming soon!
+```
 
 ## ⚙️ Configuration
 
