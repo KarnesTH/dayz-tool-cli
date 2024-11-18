@@ -2,13 +2,17 @@ use inquire::MultiSelect;
 
 use log::{error, info, warn};
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs::remove_dir_all,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     utils::{
         add_mods_to_profile, analyze_types_folder, compare_mod_versions, copy_dir, copy_keys,
         find_keys_folder, find_types_folder, get_installed_mod_list, get_map_name,
-        parse_startup_parameter, remove_keys_for_mod, save_extracted_data, update_cfgeconomy,
+        parse_startup_parameter, remove_ce_entries, remove_keys_for_mod, remove_mods_from_profile,
+        save_extracted_data, update_cfgeconomy,
     },
     Mod, ModError, Profile, ThreadPool, THREAD_POOL,
 };
@@ -363,6 +367,17 @@ pub fn update_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> 
     Ok(())
 }
 
+/// Uninstalls selected mods from the DayZ server directory.
+///
+/// This function performs a complete uninstallation of selected mods by:
+/// 1. Removing bikey files from the keys directory
+/// 2. Deleting mod-specific types folders from the mpmissions directory
+/// 3. Removing the mod directory from the workdir
+/// 4. Cleaning up CE entries from cfgeconomycore.xml
+/// 5. Updating the config.json to remove the mods from installed_mods
+///
+/// The function uses parallel processing through a thread pool to handle multiple
+/// mod uninstallations simultaneously.
 pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> {
     let installed_mods = get_installed_mod_list(profile.clone())?;
     let installed_mods_names: Vec<String> = installed_mods
@@ -383,7 +398,7 @@ pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModErro
 
             info!("Starting mod uninstalls...");
 
-            for mod_name in selected_mods {
+            for mod_name in &selected_mods {
                 pool.execute({
                     let mod_name = mod_name.clone();
                     let workdir_path = profile.workdir_path.clone();
@@ -392,10 +407,10 @@ pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModErro
                     move || {
                         let mod_path = Path::new(&workdir_path).join(&mod_name);
 
-                        if let Some(keys_folder) = find_keys_folder(&mod_path) {
-                            if let Err(e) = remove_keys_for_mod(&workdir_path, &keys_folder) {
-                                error!("Failed to remove keys for {}: {}", mod_name, e);
-                            }
+                        if let Err(e) = remove_keys_for_mod(&workdir_path, &mod_path) {
+                            error!("Failed to remove keys for {}: {}", mod_name, e);
+                        } else {
+                            info!("Successfully removed keys for {}", mod_name);
                         }
 
                         let mod_short = Mod {
@@ -405,15 +420,44 @@ pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModErro
                         let types_path = Path::new(&workdir_path)
                             .join("mpmissions")
                             .join(&map_name)
-                            .join(mod_short);
-                        if let Err(e) = std::fs::remove_dir_all(types_path) {
-                            warn!("Could not remove types folder for {}: {}", mod_name, e);
+                            .join(format!("{}_ce", mod_short));
+                        if types_path.exists() {
+                            if let Err(e) = remove_dir_all(types_path) {
+                                error!("Failed to remove types folder for {}: {}", mod_name, e);
+                            } else {
+                                info!("Successfully removed types folder for {}", mod_name);
+                            }
+                        } else {
+                            info!("No types folder found for {} (this is normal for mods without types)", mod_name);
+                        }
+
+                        if mod_path.exists() {
+                            if let Err(e) = remove_dir_all(mod_path) {
+                                error!("Failed to remove mod folder for {}: {}", mod_name, e);
+                            } else {
+                                info!("Successfully removed mod folder for {}", mod_name);
+                            }
+                        }
+
+                        if let Err(e) = remove_ce_entries(&workdir_path, &map_name, &mod_short) {
+                            error!("Failed to remove CE entries for {}: {}", mod_name, e);
+                        } else {
+                            info!("Successfully removed CE entries for {}", mod_name);
                         }
                     }
                 });
             }
 
             pool.wait();
+
+            if let Err(e) = remove_mods_from_profile(&selected_mods) {
+                error!("Failed to update config.json: {}", e);
+            } else {
+                info!(
+                    "Successfully removed {} mods from config",
+                    selected_mods.len()
+                );
+            }
         }
         Err(_) => return Err(ModError::SelectError),
     }

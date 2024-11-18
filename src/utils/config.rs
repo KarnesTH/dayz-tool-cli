@@ -176,6 +176,34 @@ pub fn add_mods_to_profile(mods: Vec<String>) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Removes specified mods from the active profile's installed mods list in the configuration file.
+///
+/// This function updates the config.json by removing the specified mods from the installed_mods
+/// array of the active profile. The function handles the entire process of reading the current
+/// configuration, modifying it, and writing it back to disk.
+pub fn remove_mods_from_profile(mods_to_remove: &[String]) -> Result<(), ConfigError> {
+    let config_path = get_config_path();
+    let mut config = read_config_file(&config_path)?;
+
+    let active_profile = config
+        .profiles
+        .iter_mut()
+        .find(|p| p.is_active)
+        .ok_or(ConfigError::NoActiveProfile)?;
+
+    active_profile.installed_mods.retain(|mod_entry| {
+        !mods_to_remove.contains(&mod_entry.as_str().unwrap_or("").to_string())
+    });
+
+    let json = to_string_pretty(&config).map_err(|_| ConfigError::SerializeError)?;
+    let mut config_file = File::create(&config_path).map_err(|_| ConfigError::CreateFileError)?;
+    config_file
+        .write_all(json.as_bytes())
+        .map_err(|_| ConfigError::WriteFileError)?;
+
+    Ok(())
+}
+
 /// Returns a customized render configuration for prompts.
 ///
 /// This function creates and returns a `RenderConfig` object with customized styles for

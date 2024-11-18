@@ -811,6 +811,13 @@ pub fn update_cfgeconomy(
     Ok(())
 }
 
+/// Removes bikey files associated with a mod from the server's keys directory.
+///
+/// This function searches for bikey files in the mod's keys folder and removes their
+/// corresponding files from the server's workdir/keys directory. It performs the following steps:
+/// 1. Verifies the existence of the workdir keys directory
+/// 2. Locates the mod's keys folder
+/// 3. Identifies and removes matching bikey files
 pub fn remove_keys_for_mod(workdir: &str, mod_path: &Path) -> Result<(), ModError> {
     let workdir_keys = Path::new(workdir).join("keys");
     if !workdir_keys.exists() {
@@ -842,6 +849,56 @@ pub fn remove_keys_for_mod(workdir: &str, mod_path: &Path) -> Result<(), ModErro
         }
     }
 
+    Ok(())
+}
+
+/// Removes Central Economy (CE) entries for a specific mod from cfgeconomycore.xml.
+///
+/// This function modifies the cfgeconomycore.xml file by removing mod-specific CE entries.
+/// It looks for and removes entire CE blocks that match the following pattern:
+/// ```xml
+/// <!-- mod_name -->
+/// <ce folder="mod_name_ce">
+///     ... (various CE entries)
+/// </ce>
+/// ```
+pub fn remove_ce_entries(workdir: &str, map_name: &str, mod_short: &str) -> Result<(), ModError> {
+    let config_path = Path::new(workdir)
+        .join("mpmissions")
+        .join(map_name)
+        .join("cfgeconomycore.xml");
+
+    if !config_path.exists() {
+        return Err(ModError::NotFound);
+    }
+
+    let content = std::fs::read_to_string(&config_path).map_err(|_| ModError::ReadError)?;
+
+    let lines: Vec<&str> = content.lines().collect();
+    let mut new_lines: Vec<String> = Vec::new();
+    let mut skip_lines = false;
+
+    for line in lines {
+        if line.contains(&format!("<!-- {} -->", mod_short))
+            || line.contains(&format!(r#"<ce folder="{}_ce">"#, mod_short))
+        {
+            skip_lines = true;
+            continue;
+        }
+
+        if skip_lines && line.trim() == "</ce>" {
+            skip_lines = false;
+            continue;
+        }
+
+        if !skip_lines {
+            new_lines.push(line.to_string());
+        }
+    }
+
+    std::fs::write(&config_path, new_lines.join("\n")).map_err(|_| ModError::WriteError)?;
+
+    info!("Successfully removed CE entries for {}", mod_short);
     Ok(())
 }
 

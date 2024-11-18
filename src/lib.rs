@@ -46,6 +46,8 @@ pub enum ConfigError {
     ProfileNotFoundError,
     #[error("Failed to serialize the value")]
     SerializeError,
+    #[error("Failed to update mods in profile")]
+    ConfigError,
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -82,6 +84,10 @@ pub enum ModError {
     PathError,
     #[error("Failed to remove file")]
     RemoveFileError,
+    #[error("Failed to write to file")]
+    WriteError,
+    #[error("Failed to read the file")]
+    ReadError,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
