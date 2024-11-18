@@ -28,38 +28,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generates a GUID from a Steam64 ID.
+    /// Provides various generation utilities for DayZ server administration.
+    ///
+    /// This command offers subcommands for generating different types of data and configurations
+    /// commonly needed in DayZ server administration, such as GUIDs from Steam64 IDs and
+    /// day/night cycle calculations.
     ///
     /// # Usage
     ///
     /// ```bash
-    /// dayz-tool-cli guid <steam64Id>
+    /// dayz-tool-cli generate <subcommand> [options]
     /// ```
-    ///
-    /// # Example
-    ///
-    /// ```bash
-    /// dayz-tool-cli guid 76561198039479170
-    /// ```
-    Guid {
-        /// The Steam64 ID to generate the GUID from.
-        id: Option<String>,
-    },
-
-    /// Converts hours and minutes into DayZ server settings for Day Night Cycle.
-    ///
-    /// # Usage
-    ///
-    /// ```bash
-    /// dayz-tool-cli dnc -d "8h" -n "10min"
-    /// ```
-    Dnc {
-        /// The amount of time the server should be in day time. (e.g. 8h, 10min)
-        #[arg(short = 'd', long)]
-        day: Option<String>,
-        /// The amount of time the server should be in night time. (e.g. 8h, 10min)
-        #[arg(short = 'n', long)]
-        night: Option<String>,
+    Generate {
+        #[command(subcommand)]
+        subcommands: GenerateCommands,
     },
 
     /// Manages mods for the DayZ server.
@@ -74,6 +56,43 @@ enum Commands {
     Mods {
         #[command(subcommand)]
         subcommands: ModCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum GenerateCommands {
+    /// Generates a GUID from a Steam64 ID.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli guid <steam64Id>
+    /// ```
+    ///
+    /// # Example
+    ///
+    /// ```bash
+    /// dayz-tool-cli generate guid 76561198039479170
+    /// ```
+    Guid {
+        /// The Steam64 ID to generate the GUID from.
+        id: Option<String>,
+    },
+
+    /// Converts hours and minutes into DayZ server settings for Day Night Cycle.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli generate dnc -d "8h" -n "10min"
+    /// ```
+    Dnc {
+        /// The amount of time the server should be in day time. (e.g. 8h, 10min)
+        #[arg(short = 'd', long)]
+        day: Option<String>,
+        /// The amount of time the server should be in night time. (e.g. 8h, 10min)
+        #[arg(short = 'n', long)]
+        night: Option<String>,
     },
 }
 
@@ -139,26 +158,28 @@ fn main() {
     } else {
         let args = Cli::parse();
         match &args.commands {
-            Commands::Guid { id } => match id {
-                Some(id) => {
-                    let guid = generate_guid(id);
-                    info!("The GUID form {} is: {}", id, guid);
-                }
-                None => error!("No ID provided"),
-            },
-            Commands::Dnc { day, night } => {
-                if let (Some(day), Some(night)) = (day, night) {
-                    match calculate_dnc(day, night) {
-                        Ok((day_duration, night_duration)) => {
-                            info!("serverTimeAcceleration = {}", day_duration);
-                            info!("serverNightTimeAcceleration = {}", night_duration);
-                        }
-                        Err(e) => error!("{}", e),
+            Commands::Generate { subcommands } => match subcommands {
+                GenerateCommands::Guid { id } => match id {
+                    Some(id) => {
+                        let guid = generate_guid(id);
+                        info!("The GUID form {} is: {}", id, guid);
                     }
-                } else {
-                    error!("Please enter both the day and night length.");
+                    None => error!("No ID provided"),
+                },
+                GenerateCommands::Dnc { day, night } => {
+                    if let (Some(day), Some(night)) = (day, night) {
+                        match calculate_dnc(day, night) {
+                            Ok((day_duration, night_duration)) => {
+                                info!("serverTimeAcceleration = {}", day_duration);
+                                info!("serverNightTimeAcceleration = {}", night_duration);
+                            }
+                            Err(e) => error!("{}", e),
+                        }
+                    } else {
+                        error!("Please enter both the day and night length.");
+                    }
                 }
-            }
+            },
             Commands::Mods { subcommands } => match subcommands {
                 ModCommands::Install => match profile {
                     Ok(profile) => {

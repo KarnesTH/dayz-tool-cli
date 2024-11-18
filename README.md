@@ -25,14 +25,22 @@ A command-line tool for simplifying DayZ server administration.
    cargo install --path .
    ```
 
-## 🛠️ Usage
+## 🛠️ Commands
 
-After installation, you can use the following commands:
-
-* 🔑 **`dayz-tool-cli guid <steam64Id>`:** Generates a GUID from the given Steam64 ID.
-* ⏰ **`dayz-tool-cli dnc -d <time>[h|min] -n <time>[h|min]`:** Calculates and displays the `serverTimeAcceleration` and `serverNightTimeAcceleration` settings.
-* 🔄 **`dayz-tool-cli mods [install|list|update]`:** Installs mods from your Steam Workshop directory to your server.
-* 🚀 **(More commands to be added soon!)**
+dayz-tool-cli
+├── mods                   # Mod management
+│   ├── install            # Install mods from workshop
+│   ├── list               # List installed mods
+│   ├── update             # Update installed mods
+│   └── uninstall          # Remove installed mods
+│
+├── generate               # Generation utilities
+│   ├── guid <steam64Id>   # Generate GUID from Steam64 ID
+│   └── dnc                # Day/Night cycle calculator
+│       ├── -d <time>      # Day length [h|min]
+│       └── -n <time>      # Night length [h|min]
+│
+└── 🚀 More commands coming soon!
 
 ## ⚙️ Configuration
 
