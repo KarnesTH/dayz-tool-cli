@@ -291,9 +291,12 @@ fn main() {
                 },
             },
             Commands::Profile { subcommands } => match subcommands {
-                ProfileCommands::Show => match show_profile() {
-                    Ok(_) => (),
-                    Err(_) => error!("Failed to show profile"),
+                ProfileCommands::Show => match profile {
+                    Ok(profile) => match show_profile(profile) {
+                        Ok(_) => (),
+                        Err(_) => error!("Failed to show profile"),
+                    },
+                    Err(_) => error!("No profile found"),
                 },
                 ProfileCommands::Update => {
                     info!("Updated current profile")

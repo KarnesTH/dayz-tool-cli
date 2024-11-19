@@ -7,6 +7,7 @@ use std::{
     thread,
 };
 
+use colored::Colorize;
 use lazy_static::lazy_static;
 
 use serde::{Deserialize, Serialize};
@@ -108,6 +109,7 @@ pub struct Profile {
 
 lazy_static! {
     pub static ref THREAD_POOL: ThreadPool = ThreadPool::new(num_cpus::get());
+    pub static ref THEME: Theme = Theme::default();
 }
 
 pub struct ThreadPool {
@@ -413,4 +415,56 @@ pub struct ModChecksum {
     pub path: PathBuf,
     pub size: u64,
     pub hash: String,
+}
+
+pub struct Theme {
+    pub header: (u8, u8, u8),
+    pub label: (u8, u8, u8),
+    pub value: (u8, u8, u8),
+}
+
+impl Theme {
+    pub fn header<T: AsRef<str>>(&self, text: T) -> String {
+        text.as_ref()
+            .truecolor(self.header.0, self.header.1, self.header.2)
+            .bold()
+            .to_string()
+    }
+
+    pub fn label<T: AsRef<str>>(&self, text: T) -> String {
+        text.as_ref()
+            .truecolor(self.label.0, self.label.1, self.label.2)
+            .bold()
+            .to_string()
+    }
+
+    pub fn value<T: AsRef<str>>(&self, text: T) -> String {
+        text.as_ref()
+            .truecolor(self.value.0, self.value.1, self.value.2)
+            .to_string()
+    }
+
+    pub fn value_italic<T: AsRef<str>>(&self, text: T) -> String {
+        text.as_ref()
+            .truecolor(self.value.0, self.value.1, self.value.2)
+            .italic()
+            .to_string()
+    }
+
+    pub fn value_bold<T: AsRef<str>>(&self, text: T) -> String {
+        text.as_ref()
+            .truecolor(self.value.0, self.value.1, self.value.2)
+            .bold()
+            .to_string()
+    }
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self {
+            header: (238, 5, 242),
+            label: (104, 5, 242),
+            value: (255, 255, 255),
+        }
+    }
 }
