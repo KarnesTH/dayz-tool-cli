@@ -41,6 +41,14 @@ dayz-tool-cli
 │       ├── -d <time>      # Day length [h|min]
 │       └── -n <time>      # Night length [h|min]
 │
+├── profile                # Profile management
+│   ├── add                # Add a new profile
+│   ├── show               # Show the current profile
+│   ├── delete             # Delete a profile
+│   ├── list               # List all profiles
+│   ├── update             # Update a profile
+│   └── use                # Use a profile
+│
 └── 🚀 More commands coming soon!
 ```
 

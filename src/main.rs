@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use dayz_tool_cli::commands::{
-    calculate_dnc, generate_guid, install_mods, list_installed_mods, uninstall_mods, update_mods,
+    calculate_dnc, generate_guid, install_mods, list_installed_mods, show_profile, uninstall_mods,
+    update_mods,
 };
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config, init_logger,
@@ -56,6 +57,21 @@ enum Commands {
     Mods {
         #[command(subcommand)]
         subcommands: ModCommands,
+    },
+
+    /// Manages profiles for the CLI.
+    ///
+    /// This command provides subcommands for creating, updating, deleting, and switching between profiles.
+    /// Profiles allow you to store and manage different configurations for the CLI.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli profile <subcommand>
+    /// ```
+    Profile {
+        #[command(subcommand)]
+        subcommands: ProfileCommands,
     },
 }
 
@@ -139,6 +155,66 @@ enum ModCommands {
     Update,
 }
 
+#[derive(Subcommand)]
+enum ProfileCommands {
+    /// Displays the current profile settings.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli profile show
+    /// ```
+    Show,
+
+    /// Updates the profile settings.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli profile update
+    /// ```
+    Update,
+
+    /// Deletes the current profile settings.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli profile delete
+    /// ```
+    Delete,
+
+    /// Creates a new profile.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli profile add
+    /// ```
+    Add,
+
+    /// Lists all available profiles.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli profile list
+    /// ```
+    List,
+
+    /// Uses the specified profile.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli profile use <profileName>
+    /// ```
+    Use {
+        /// The name of the profile to switch to.
+        profile_name: String,
+    },
+}
+
 fn main() {
     inquire::set_global_render_config(get_render_config());
 
@@ -213,6 +289,27 @@ fn main() {
                     },
                     Err(_) => error!("No profile found"),
                 },
+            },
+            Commands::Profile { subcommands } => match subcommands {
+                ProfileCommands::Show => match show_profile() {
+                    Ok(_) => (),
+                    Err(_) => error!("Failed to show profile"),
+                },
+                ProfileCommands::Update => {
+                    info!("Updated current profile")
+                }
+                ProfileCommands::Delete => {
+                    info!("Deleted current profile")
+                }
+                ProfileCommands::Add => {
+                    info!("Added new profile")
+                }
+                ProfileCommands::List => {
+                    info!("Listed profiles")
+                }
+                ProfileCommands::Use { profile_name } => {
+                    info!("Switch to profile: {}", profile_name)
+                }
             },
         }
     }
