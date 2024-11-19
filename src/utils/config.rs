@@ -145,6 +145,27 @@ pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> 
     Ok(())
 }
 
+/// Saves a given profile to the configuration file.
+///
+/// This function updates the active profile in the configuration file with the
+/// data from the provided profile. The profile to be updated is identified by
+/// the `is_active` flag.
+pub fn save_profile(profile: &Profile) -> Result<(), ConfigError> {
+    let config_path = get_config_path();
+    let mut config = read_config_file(&config_path)?;
+
+    if let Some(existing_profile) = config.profiles.iter_mut().find(|p| p.is_active) {
+        *existing_profile = profile.clone();
+        let json = to_string_pretty(&config).map_err(|_| ConfigError::SerializeError)?;
+        let mut file = File::create(&config_path).map_err(|_| ConfigError::CreateFileError)?;
+        file.write_all(json.as_bytes())
+            .map_err(|_| ConfigError::WriteFileError)?;
+        Ok(())
+    } else {
+        Err(ConfigError::NoActiveProfile)
+    }
+}
+
 /// Adds a list of mods to the active profile in the configuration file.
 ///
 /// This function takes a list of mod names, reads the configuration file, and adds the mods

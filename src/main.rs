@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use dayz_tool_cli::commands::{
     calculate_dnc, generate_guid, install_mods, list_installed_mods, show_profile, uninstall_mods,
-    update_mods,
+    update_mods, update_profile,
 };
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config, init_logger,
@@ -298,9 +298,13 @@ fn main() {
                     },
                     Err(_) => error!("No profile found"),
                 },
-                ProfileCommands::Update => {
-                    info!("Updated current profile")
-                }
+                ProfileCommands::Update => match profile {
+                    Ok(profile) => match update_profile(profile) {
+                        Ok(_) => (),
+                        Err(_) => error!("Failed to update profile"),
+                    },
+                    Err(_) => error!("No profile found"),
+                },
                 ProfileCommands::Delete => {
                     info!("Deleted current profile")
                 }
