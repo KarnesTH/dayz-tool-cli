@@ -1,8 +1,10 @@
+use std::path::PathBuf;
+
 use inquire::{Confirm, Text};
 use log::debug;
 
 use crate::{
-    utils::{get_render_config, save_profile},
+    utils::{add_profile, get_render_config, save_profile},
     ConfigError, Profile, THEME,
 };
 
@@ -115,6 +117,31 @@ pub fn update_profile(mut profile: Profile) -> Result<(), ConfigError> {
     } else {
         println!("{}", THEME.value_italic("Changes discarded."));
     }
+
+    Ok(())
+}
+
+pub fn create_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
+    debug!("Creating a new profile");
+
+    let name = Text::new("Please enter a name.")
+        .with_help_message("Please enter a name for your profile. (e.g. Your server's name)")
+        .prompt()
+        .expect("Failed to get name");
+
+    let workdir_path = Text::new("What's your workdir path?").with_help_message("Please enter the path to your DayZ server's working directory. (e.g. /home/user/DayZServer)").prompt().expect("Failed to get workdir path");
+
+    let workshop_path = Text::new("What's your !Workshop path?").with_help_message("Please enter the path to your DayZ server's workshop directory. (e.g. for the DayZ Standalone Launcher /path/to/steam/steamapps/common/DayZ/!Workshop)").prompt().expect("Failed to get workshop path");
+
+    let profile = Profile {
+        name,
+        workdir_path,
+        workshop_path,
+        installed_mods: vec![],
+        is_active: false,
+    };
+
+    add_profile(config_path, &profile)?;
 
     Ok(())
 }

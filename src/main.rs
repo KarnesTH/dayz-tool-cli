@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use dayz_tool_cli::commands::{
-    calculate_dnc, generate_guid, install_mods, list_installed_mods, show_profile, uninstall_mods,
-    update_mods, update_profile,
+    calculate_dnc, create_profile, generate_guid, install_mods, list_installed_mods, show_profile,
+    uninstall_mods, update_mods, update_profile,
 };
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config, init_logger,
@@ -308,9 +308,10 @@ fn main() {
                 ProfileCommands::Delete => {
                     info!("Deleted current profile")
                 }
-                ProfileCommands::Add => {
-                    info!("Added new profile")
-                }
+                ProfileCommands::Add => match create_profile(&config_path) {
+                    Ok(_) => info!("Profile created successfully"),
+                    Err(_) => error!("Failed to create profile"),
+                },
                 ProfileCommands::List => {
                     info!("Listed profiles")
                 }
