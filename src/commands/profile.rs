@@ -121,6 +121,14 @@ pub fn update_profile(mut profile: Profile) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Creates a new DayZ server profile by prompting the user for necessary information.
+///
+/// This function interactively collects the following information:
+/// - Profile name (e.g., server name)
+/// - Working directory path (path to DayZ server directory)
+/// - Workshop path (path to DayZ workshop mods directory)
+///
+/// The created profile is then added to the configuration file.
 pub fn create_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
     debug!("Creating a new profile");
 

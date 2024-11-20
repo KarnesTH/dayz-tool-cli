@@ -1,7 +1,8 @@
 use std::{
+    io::{self, Write},
     path::PathBuf,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         mpsc, Arc, Mutex,
     },
     thread,
@@ -26,8 +27,6 @@ pub enum GuidError {
     #[error("Steam64ID must contain only numeric characters")]
     InvalidCharacters,
 }
-
-pub type Result<T> = std::result::Result<T, GuidError>;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ConfigError {
@@ -417,6 +416,7 @@ pub struct ModChecksum {
     pub hash: String,
 }
 
+#[derive(Debug, Clone)]
 pub struct Theme {
     pub header: (u8, u8, u8),
     pub label: (u8, u8, u8),
@@ -465,6 +465,86 @@ impl Default for Theme {
             header: (238, 5, 242),
             label: (104, 5, 242),
             value: (255, 255, 255),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ProgressBar {
+    progress: Arc<AtomicU64>,
+    total: u64,
+    width: usize,
+    description: String,
+    theme: Arc<Theme>,
+}
+
+impl ProgressBar {
+    pub fn new(total: u64, width: usize, description: &str, theme: Arc<Theme>) -> Self {
+        ProgressBar {
+            progress: Arc::new(AtomicU64::new(0)),
+            total,
+            width,
+            description: description.to_string(),
+            theme,
+        }
+    }
+
+    pub fn inc(&self, delta: u64) {
+        self.progress.fetch_add(delta, Ordering::Relaxed);
+        self.draw();
+    }
+
+    pub fn set(&self, progress: u64) {
+        self.progress.store(progress, Ordering::Relaxed);
+        self.draw();
+    }
+
+    fn calculate_precentage(&self) -> f64 {
+        let current = self.progress.load(Ordering::Relaxed);
+        (current as f64 / self.total as f64) * 100.0
+    }
+
+    fn format_size(&self, bytes: u64) -> String {
+        const KB: u64 = 1024;
+        const MB: u64 = KB * 1024;
+        const GB: u64 = MB * 1024;
+
+        if bytes >= GB {
+            format!("{:.2} GB", bytes as f64 / GB as f64)
+        } else if bytes >= MB {
+            format!("{:.2} MB", bytes as f64 / MB as f64)
+        } else if bytes >= KB {
+            format!("{:.2} KB", bytes as f64 / KB as f64)
+        } else {
+            format!("{} B", bytes)
+        }
+    }
+
+    fn draw(&self) {
+        let precentage = self.calculate_precentage();
+        let filled_width = ((self.width as f64) * (precentage / 100.0)) as usize;
+        let empty_width = self.width - filled_width;
+
+        let current = self.progress.load(Ordering::Relaxed);
+
+        let description = self.theme.label(&self.description);
+        let progress_bar = format!(
+            "{}{}",
+            "█".repeat(filled_width).truecolor(104, 5, 242),
+            "░".repeat(empty_width).truecolor(50, 50, 50)
+        );
+        let stats = self.theme.value(format!(
+            "{:.1}% ({}/{})",
+            precentage,
+            self.format_size(current),
+            self.format_size(self.total)
+        ));
+
+        print!("\r{}: [{}] {}", description, progress_bar, stats);
+        io::stdout().flush().unwrap();
+
+        if current >= self.total {
+            println!();
         }
     }
 }

@@ -3,7 +3,7 @@ use log::error;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 
-use crate::{GuidError, Result};
+use crate::GuidError;
 
 /// Generates a GUID from a given Steam64 ID.
 ///
@@ -68,7 +68,7 @@ pub fn generate_guid(id: &str) -> String {
 /// * `InvalidLength`: The Steam64 ID is not 17 characters long.
 /// * `InvalidPrefix`: The Steam64 ID does not start with "7656119".
 /// * `InvalidCharacters`: The Steam64 ID contains invalid characters.
-fn validate_id(id: &str) -> Result<String> {
+fn validate_id(id: &str) -> Result<String, GuidError> {
     if id.len() != 17 {
         return Err(GuidError::InvalidLength);
     } else if !id.starts_with("7656119") {

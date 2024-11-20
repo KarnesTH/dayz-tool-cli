@@ -1,9 +1,9 @@
 use crate::{
     utils::{get_config_path, get_profile},
-    Event, EventsWrapper, ModChecksum, ModError, Profile, SpawnableType, SpawnableTypesWrapper,
-    ThreadPool, Type, TypesWrapper,
+    Event, EventsWrapper, ModChecksum, ModError, Profile, ProgressBar, SpawnableType,
+    SpawnableTypesWrapper, ThreadPool, Type, TypesWrapper, THEME,
 };
-use log::{error, info};
+use log::{debug, error, info};
 use quick_xml::se::to_string;
 use regex::Regex;
 use serde::Serialize;
@@ -73,7 +73,7 @@ pub fn copy_dir(source_dir: &Path, target_dir: &Path) -> Result<(), ModError> {
             let file_size = metadata.len();
 
             if file_size > LARGE_FILE_THRESHOLD {
-                info!(
+                debug!(
                     "Copying large file ({} MB): {}",
                     file_size / (1024 * 1024),
                     source_path.display()
@@ -103,26 +103,25 @@ fn copy_large_file(source: &Path, target: &Path, chunk_size: usize) -> std::io::
     let mut source_file = File::open(source)?;
     let mut target_file = File::create(target)?;
     let file_size = source_file.metadata()?.len();
-    let mut bytes_copied = 0u64;
     let mut buffer = vec![0; chunk_size];
 
-    while bytes_copied < file_size {
-        let bytes_read = source_file.read(&mut buffer)?;
+    let progress = ProgressBar::new(
+        file_size,
+        30,
+        &format!(
+            "Copying {}",
+            source.file_name().unwrap_or_default().to_string_lossy()
+        ),
+        Arc::new(THEME.clone()),
+    );
+
+    while let Ok(bytes_read) = source_file.read(&mut buffer) {
         if bytes_read == 0 {
             break;
         }
 
         target_file.write_all(&buffer[..bytes_read])?;
-        bytes_copied += bytes_read as u64;
-
-        if bytes_copied % (50 * 1024 * 1024) == 0 {
-            info!(
-                "Progress: {:.1}% ({}/{} MB)",
-                (bytes_copied as f64 / file_size as f64) * 100.0,
-                bytes_copied / (1024 * 1024),
-                file_size / (1024 * 1024)
-            );
-        }
+        progress.inc(bytes_read as u64);
     }
 
     target_file.flush()?;
@@ -150,7 +149,7 @@ fn calculate_mod_checksums(
         .filter(|e| e.file_type().is_file())
         .collect();
 
-    info!("Found {} files to check", files.len());
+    debug!("Found {} files to check", files.len());
 
     for entry in files {
         let checksums = Arc::clone(&checksums_mutex);
@@ -251,10 +250,10 @@ pub fn compare_mod_versions(
     workdir_path: &Path,
     pool: &ThreadPool,
 ) -> Result<bool, std::io::Error> {
-    info!("Calculating checksums for workshop version...");
+    debug!("Calculating checksums for workshop version...");
     let workshop_checksums = calculate_mod_checksums(workshop_path, pool)?;
 
-    info!("Calculating checksums for installed version...");
+    debug!("Calculating checksums for installed version...");
     let workdir_checksums = calculate_mod_checksums(workdir_path, pool)?;
 
     if workshop_checksums.len() != workdir_checksums.len() {
@@ -541,7 +540,7 @@ pub fn analyze_types_folder(folder_path: &Path) -> AnalyzeResult {
     let mut spawnable_types = Vec::new();
     let mut events = Vec::new();
 
-    info!("Durchsuche Ordner: {}", folder_path.display());
+    debug!("Scanning directory: {}", folder_path.display());
 
     for entry in read_dir(folder_path)? {
         let entry = entry?;
@@ -554,20 +553,20 @@ pub fn analyze_types_folder(folder_path: &Path) -> AnalyzeResult {
                 .unwrap_or("")
                 .to_lowercase();
 
-            info!("File found: {}", file_name);
+            debug!("File found: {}", file_name);
 
             if file_name.contains("types") && !file_name.contains("spawnable") {
-                info!("Processing types file");
+                debug!("Processing types file");
                 types = extract_types(&path)?;
-                info!("Found Types: {}", types.len());
+                debug!("Found Types: {}", types.len());
             } else if file_name.contains("spawnabletypes") {
-                info!("Processing spawnabletypes file");
+                debug!("Processing spawnabletypes file");
                 spawnable_types = extract_cfgspawnabletypes(&path)?;
-                info!("Found SpawnableTypes: {}", spawnable_types.len());
+                debug!("Found SpawnableTypes: {}", spawnable_types.len());
             } else if file_name.contains("events") {
-                info!("Processing events file");
+                debug!("Processing events file");
                 events = extract_events(&path)?;
-                info!("Found Events: {}", events.len());
+                debug!("Found Events: {}", events.len());
             }
         }
     }
@@ -898,7 +897,7 @@ pub fn remove_ce_entries(workdir: &str, map_name: &str, mod_short: &str) -> Resu
 
     std::fs::write(&config_path, new_lines.join("\n")).map_err(|_| ModError::WriteError)?;
 
-    info!("Successfully removed CE entries for {}", mod_short);
+    debug!("Successfully removed CE entries for {}", mod_short);
     Ok(())
 }
 

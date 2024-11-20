@@ -1,10 +1,11 @@
 use inquire::MultiSelect;
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 
 use std::{
     fs::remove_dir_all,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use crate::{
@@ -14,7 +15,7 @@ use crate::{
         parse_startup_parameter, remove_ce_entries, remove_keys_for_mod, remove_mods_from_profile,
         save_extracted_data, update_cfgeconomy,
     },
-    Mod, ModError, Profile, ThreadPool, THREAD_POOL,
+    Mod, ModError, Profile, ProgressBar, ThreadPool, THEME, THREAD_POOL,
 };
 
 /// Installs selected mods from the workshop directory to the workdir directory.
@@ -65,6 +66,13 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
                     }
                 })
                 .collect();
+
+            let progress = Arc::new(ProgressBar::new(
+                selected_mods_paths.len() as u64,
+                30,
+                "Installing mods",
+                Arc::new(THEME.clone()),
+            ));
 
             for selected_mod_path in selected_mods_paths {
                 let source_path = PathBuf::from(selected_mod_path);
@@ -173,6 +181,8 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
                 }
             }
 
+            progress.inc(1);
+
             add_mods_to_profile(mods_to_install.clone()).unwrap();
             pool.wait();
         }
@@ -236,10 +246,18 @@ pub fn update_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> 
 
     info!("Starting mod updates...");
 
+    let progress = Arc::new(ProgressBar::new(
+        installed_mods.len() as u64,
+        30,
+        "Updating mods",
+        Arc::new(THEME.clone()),
+    ));
+
     for mod_entry in installed_mods {
         let mod_name = mod_entry.as_str().unwrap().to_string();
         let mod_workdir_path = Path::new(&workdir_path).join(&mod_name);
         let mod_workshop_path = Path::new(&workshop_path).join(&mod_name);
+        let progress = Arc::clone(&progress);
 
         if !mod_workshop_path.exists() {
             error!(
@@ -346,7 +364,7 @@ pub fn update_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModError> 
                     } else {
                         info!("No types folder found for {}", mod_name);
                     }
-
+                    progress.inc(1);
                     info!("Successfully updated {}", mod_name);
                 }
                 Err(e) => {
@@ -396,7 +414,7 @@ pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModErro
         Ok(selected_mods) => {
             let map_name = get_map_name(&profile.workdir_path)?;
 
-            info!("Starting mod uninstalls...");
+            debug!("Starting mod uninstalls...");
 
             for mod_name in &selected_mods {
                 pool.execute({
@@ -410,7 +428,7 @@ pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModErro
                         if let Err(e) = remove_keys_for_mod(&workdir_path, &mod_path) {
                             error!("Failed to remove keys for {}: {}", mod_name, e);
                         } else {
-                            info!("Successfully removed keys for {}", mod_name);
+                            debug!("Successfully removed keys for {}", mod_name);
                         }
 
                         let mod_short = Mod {
@@ -425,7 +443,7 @@ pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModErro
                             if let Err(e) = remove_dir_all(types_path) {
                                 error!("Failed to remove types folder for {}: {}", mod_name, e);
                             } else {
-                                info!("Successfully removed types folder for {}", mod_name);
+                                debug!("Successfully removed types folder for {}", mod_name);
                             }
                         } else {
                             info!("No types folder found for {} (this is normal for mods without types)", mod_name);
@@ -453,7 +471,7 @@ pub fn uninstall_mods(profile: Profile, pool: &ThreadPool) -> Result<(), ModErro
             if let Err(e) = remove_mods_from_profile(&selected_mods) {
                 error!("Failed to update config.json: {}", e);
             } else {
-                info!(
+                debug!(
                     "Successfully removed {} mods from config",
                     selected_mods.len()
                 );

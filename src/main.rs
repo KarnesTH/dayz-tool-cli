@@ -6,8 +6,8 @@ use dayz_tool_cli::commands::{
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config, init_logger,
 };
-use dayz_tool_cli::THREAD_POOL;
-use log::{error, info};
+use dayz_tool_cli::{THEME, THREAD_POOL};
+use log::{debug, error, info};
 
 /// A command-line tool for simplifying DayZ server administration.
 ///
@@ -238,7 +238,12 @@ fn main() {
                 GenerateCommands::Guid { id } => match id {
                     Some(id) => {
                         let guid = generate_guid(id);
-                        info!("The GUID form {} is: {}", id, guid);
+                        debug!("The GUID form {} is: {}", id, guid);
+                        println!(
+                            "The GUID from {} is: {}",
+                            THEME.value_italic(id),
+                            THEME.value_bold(guid)
+                        )
                     }
                     None => error!("No ID provided"),
                 },
@@ -261,7 +266,10 @@ fn main() {
                     Ok(profile) => {
                         match install_mods(&THREAD_POOL, profile) {
                             Ok(mods) => {
-                                info!("Please add this: {} to your startup parameters", mods)
+                                println!(
+                                    "Please add this: {} to your startup parameters",
+                                    THEME.value_bold(mods)
+                                )
                             }
                             Err(_) => error!("Failed to install mods"),
                         };
