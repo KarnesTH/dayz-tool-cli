@@ -60,12 +60,29 @@ pub fn get_profile(config_path: &PathBuf) -> Result<Profile, ConfigError> {
     Ok(active_profile.unwrap().clone())
 }
 
+/// Retrieves all profiles from the DayZ configuration file.
+///
+/// # Arguments
+/// * `config_path` - A PathBuf reference to the configuration file location
+///
+/// # Returns
+/// * `Ok(Vec<Profile>)` - A vector containing all profiles from the configuration
+/// * `Err(ConfigError)` - If there was an error reading or parsing the configuration
 pub fn get_profiles(config_path: &PathBuf) -> Result<Vec<Profile>, ConfigError> {
     let config = read_config_file(config_path)?;
 
     Ok(config.profiles)
 }
 
+/// Removes a profile from the DayZ configuration file.
+///
+/// # Arguments
+/// * `config_path` - A PathBuf reference to the configuration file
+/// * `profile` - A reference to the Profile that should be removed
+///
+/// # Returns
+/// * `Ok(())` - If the profile was successfully removed or wasn't found
+/// * `Err(ConfigError)` - If there was an error during the removal process
 pub fn remove_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), ConfigError> {
     let profiles = get_profiles(config_path)?;
 
@@ -73,6 +90,42 @@ pub fn remove_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), Co
         if p.name == profile.name {
             let mut config = read_config_file(config_path)?;
             config.profiles.remove(i);
+            let json = to_string_pretty(&config).unwrap();
+            let mut file = File::create(config_path).unwrap();
+            file.write_all(json.as_bytes()).unwrap();
+            return Ok(());
+        }
+    }
+
+    Ok(())
+}
+
+/// Switches the active profile in the DayZ configuration.
+///
+/// This function changes the active state of profiles by:
+/// 1. Deactivating the currently active profile
+/// 2. Setting the specified profile as active
+/// 3. Saving the updated configuration to disk
+///
+/// # Arguments
+/// * `config_path` - A PathBuf reference to the configuration file
+/// * `profile` - A reference to the Profile that should be set as active
+///
+/// # Returns
+/// * `Ok(())` - If the profile switch was successful
+/// * `Err(ConfigError)` - If there was an error during the switch process
+pub fn switch_active_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), ConfigError> {
+    let profiles = get_profiles(config_path)?;
+
+    for (i, p) in profiles.iter().enumerate() {
+        if p.name == profile.name {
+            let mut config = read_config_file(config_path)?;
+            let active_profile = config.profiles.iter_mut().find(|p| p.is_active).unwrap();
+            active_profile.is_active = false;
+            for p in config.profiles.iter_mut() {
+                p.is_active = false;
+            }
+            config.profiles[i].is_active = true;
             let json = to_string_pretty(&config).unwrap();
             let mut file = File::create(config_path).unwrap();
             file.write_all(json.as_bytes()).unwrap();

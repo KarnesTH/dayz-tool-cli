@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 use dayz_tool_cli::commands::{
     calculate_dnc, create_profile, delete_profile, generate_guid, install_mods,
-    list_installed_mods, list_profiles, show_profile, uninstall_mods, update_mods, update_profile,
+    list_installed_mods, list_profiles, show_profile, switch_profile, uninstall_mods, update_mods,
+    update_profile,
 };
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config, init_logger,
@@ -209,10 +210,7 @@ enum ProfileCommands {
     /// ```bash
     /// dayz-tool-cli profile use <profileName>
     /// ```
-    Use {
-        /// The name of the profile to switch to.
-        profile_name: String,
-    },
+    Use,
 }
 
 fn main() {
@@ -325,9 +323,10 @@ fn main() {
                     Ok(_) => (),
                     Err(_) => error!("Failed to list profiles"),
                 },
-                ProfileCommands::Use { profile_name } => {
-                    info!("Switch to profile: {}", profile_name)
-                }
+                ProfileCommands::Use => match switch_profile(&config_path) {
+                    Ok(_) => info!("Profile switched successfully"),
+                    Err(_) => error!("Failed to switch profile"),
+                },
             },
         }
     }

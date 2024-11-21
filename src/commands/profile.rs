@@ -1,10 +1,13 @@
 use std::path::PathBuf;
 
 use inquire::{Confirm, InquireError, Select, Text};
-use log::debug;
+use log::{debug, error};
 
 use crate::{
-    utils::{add_profile, get_profiles, get_render_config, remove_profile, save_profile},
+    utils::{
+        add_profile, get_profiles, get_render_config, remove_profile, save_profile,
+        switch_active_profile,
+    },
     ConfigError, Profile, THEME,
 };
 
@@ -154,6 +157,18 @@ pub fn create_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Lists all available DayZ profiles in the configuration directory.
+///
+/// This function reads and displays all profiles from the given configuration path.
+/// Active profiles are specially marked in the output. If no profiles are found,
+/// an appropriate message is displayed.
+///
+/// # Arguments
+/// * `config_path` - A PathBuf reference pointing to the configuration directory
+///
+/// # Returns
+/// * `Ok(())` - If the profiles were successfully listed
+/// * `Err(ConfigError)` - If there was an error reading the profiles
 pub fn list_profiles(config_path: &PathBuf) -> Result<(), ConfigError> {
     debug!("List Profiles");
     let profiles = get_profiles(config_path)?;
@@ -177,6 +192,16 @@ pub fn list_profiles(config_path: &PathBuf) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Deletes a user-selected profile from the configuration.
+///
+/// This function prompts the user to select a profile to delete from the configuration file.
+///
+/// # Arguments
+/// * `config_path` - Path to the configuration directory
+///
+/// # Returns
+/// * `Ok(())` if the profile was successfully deleted or operation was cancelled
+/// * `Err(ConfigError)` if an error occurred during deletion
 pub fn delete_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
     debug!("Delete Profile");
     let profiles = get_profiles(config_path)?;
@@ -200,7 +225,46 @@ pub fn delete_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
 
             remove_profile(config_path, profile)?;
         }
-        Err(_) => println!("Error"),
+        Err(_) => error!("Error"),
+    }
+
+    Ok(())
+}
+
+/// Switches the active profile based on user selection.
+///
+/// This function prompts the user to select a profile from the list of available profiles and sets the selected profile as the active profile.
+///
+/// # Arguments
+/// * `config_path` - Path to the configuration directory
+///
+/// # Returns
+/// * `Ok(())` if the profile switch was successful
+/// * `Err(ConfigError)` if an error occurred
+pub fn switch_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
+    debug!("Switch Profile");
+    let profiles = get_profiles(config_path)?;
+
+    if profiles.is_empty() {
+        println!("{}", THEME.value_italic("No profiles found."));
+        return Ok(());
+    }
+
+    let profile_names: Vec<String> = profiles.iter().map(|p| p.name.clone()).collect();
+
+    let ans: Result<String, InquireError> =
+        Select::new("Select a profile to switch to", profile_names).prompt();
+
+    match ans {
+        Ok(choice) => {
+            let profile = profiles
+                .iter()
+                .find(|p| p.name == choice)
+                .expect("Failed to find profile to switch to");
+
+            switch_active_profile(config_path, profile)?;
+        }
+        Err(_) => error!("Error"),
     }
 
     Ok(())
