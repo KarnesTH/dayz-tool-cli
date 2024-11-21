@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use inquire::{Confirm, Text};
+use inquire::{Confirm, InquireError, Select, Text};
 use log::debug;
 
 use crate::{
-    utils::{add_profile, get_render_config, save_profile},
+    utils::{add_profile, get_profiles, get_render_config, remove_profile, save_profile},
     ConfigError, Profile, THEME,
 };
 
@@ -150,6 +150,58 @@ pub fn create_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
     };
 
     add_profile(config_path, &profile)?;
+
+    Ok(())
+}
+
+pub fn list_profiles(config_path: &PathBuf) -> Result<(), ConfigError> {
+    debug!("List Profiles");
+    let profiles = get_profiles(config_path)?;
+    if profiles.is_empty() {
+        println!("{}", THEME.value_italic("No profiles found."));
+    } else {
+        println!("{}", THEME.header("Available Profiles"));
+        for profile in profiles {
+            if profile.is_active {
+                println!(
+                    "\t{} {}",
+                    THEME.value(&profile.name),
+                    THEME.value_bold("(active)")
+                );
+            } else {
+                println!("\t{}", THEME.value(&profile.name));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn delete_profile(config_path: &PathBuf) -> Result<(), ConfigError> {
+    debug!("Delete Profile");
+    let profiles = get_profiles(config_path)?;
+
+    if profiles.is_empty() {
+        println!("{}", THEME.value_italic("No profiles found."));
+        return Ok(());
+    }
+
+    let profile_names: Vec<String> = profiles.iter().map(|p| p.name.clone()).collect();
+
+    let ans: Result<String, InquireError> =
+        Select::new("Select a profile to remove", profile_names).prompt();
+
+    match ans {
+        Ok(choice) => {
+            let profile = profiles
+                .iter()
+                .find(|p| p.name == choice)
+                .expect("Failed to find profile to delete");
+
+            remove_profile(config_path, profile)?;
+        }
+        Err(_) => println!("Error"),
+    }
 
     Ok(())
 }

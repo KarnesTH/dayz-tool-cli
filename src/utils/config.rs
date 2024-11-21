@@ -60,6 +60,29 @@ pub fn get_profile(config_path: &PathBuf) -> Result<Profile, ConfigError> {
     Ok(active_profile.unwrap().clone())
 }
 
+pub fn get_profiles(config_path: &PathBuf) -> Result<Vec<Profile>, ConfigError> {
+    let config = read_config_file(config_path)?;
+
+    Ok(config.profiles)
+}
+
+pub fn remove_profile(config_path: &PathBuf, profile: &Profile) -> Result<(), ConfigError> {
+    let profiles = get_profiles(config_path)?;
+
+    for (i, p) in profiles.iter().enumerate() {
+        if p.name == profile.name {
+            let mut config = read_config_file(config_path)?;
+            config.profiles.remove(i);
+            let json = to_string_pretty(&config).unwrap();
+            let mut file = File::create(config_path).unwrap();
+            file.write_all(json.as_bytes()).unwrap();
+            return Ok(());
+        }
+    }
+
+    Ok(())
+}
+
 /// Adds a new profile to the configuration file.
 ///
 /// This function takes a path to the configuration file and a `Profile` object, and adds the profile

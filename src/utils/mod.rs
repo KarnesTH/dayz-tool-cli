@@ -4,7 +4,7 @@ mod mods;
 
 pub use config::{
     add_mods_to_profile, add_profile, create_initial_profile, get_config_path, get_profile,
-    get_render_config, remove_mods_from_profile, save_profile,
+    get_profiles, get_render_config, remove_mods_from_profile, remove_profile, save_profile,
 };
 
 pub use log::init_logger;
