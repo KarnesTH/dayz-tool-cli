@@ -36,10 +36,12 @@ dayz-tool-cli
 │   └── uninstall          # Remove installed mods
 │
 ├── generate               # Generation utilities
-│   ├── guid <steam64Id>   # Generate GUID from Steam64 ID
-│   └── dnc                # Day/Night cycle calculator
-│       ├── -d <time>      # Day length [h|min]
-│       └── -n <time>      # Night length [h|min]
+│   ├── guid               # GUID generator
+│   │   └── <steam64Id>    # Generate GUID from Steam64 ID
+│   ├── dnc                # Day/Night cycle calculator
+│   │   ├── -d <time>      # Day length [h|min]
+│   │   └── -n <time>      # Night length [h|min]
+│   └── start-up           # Generate server start-up file
 │
 ├── profile                # Profile management
 │   ├── add                # Add a new profile
