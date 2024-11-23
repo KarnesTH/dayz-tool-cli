@@ -13,7 +13,6 @@ rem Server Configuration
 set SERVER_DIR={server_path}        rem Path to DayZ server installation
 set SERVER_PORT={server_port}       rem Server port
 set SERVER_NAME={server_name}       rem Name of the server
-set SERVER_PROFILE={server_profile} rem Server profile name
 
 rem Steam Configuration
 set STEAMCMD_PATH={steamcmd_path}   rem Path to SteamCMD installation
@@ -33,7 +32,7 @@ rem - Download/Update DayZ Server files
 rem - Validate the installation
 :update_server
 echo Updating server...
-"%STEAMCMD_PATH%\steamcmd.exe" +force_install_dir "%SERVER_DIR%\%SERVER_PROFILE%" ^
+"%STEAMCMD_PATH%\steamcmd.exe" +force_install_dir "%SERVER_DIR%" ^
     +login %STEAM_USER% %STEAM_PASSWORD% ^
     +app_update 223350 validate ^
     +quit
