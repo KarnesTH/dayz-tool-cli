@@ -13,7 +13,7 @@ use crate::{
         add_mods_to_profile, analyze_types_folder, compare_mod_versions, copy_dir, copy_keys,
         find_keys_folder, find_types_folder, get_installed_mod_list, get_map_name,
         parse_startup_parameter, remove_ce_entries, remove_keys_for_mod, remove_mods_from_profile,
-        save_extracted_data, update_cfgeconomy,
+        save_extracted_data, save_profile, update_cfgeconomy,
     },
     Mod, ModError, Profile, ProgressBar, ThreadPool, THEME, THREAD_POOL,
 };
@@ -192,7 +192,11 @@ pub fn install_mods(pool: &ThreadPool, profile: Profile) -> Result<String, ModEr
     }
 
     match parse_startup_parameter() {
-        Ok(startup_parameter) => Ok(startup_parameter),
+        Ok(startup_parameter) => {
+            profile.clone().start_parameters = Some(startup_parameter.clone());
+            save_profile(&profile).unwrap();
+            Ok(startup_parameter)
+        }
         Err(_) => Err(ModError::ParseError),
     }
 }
@@ -499,6 +503,7 @@ mod tests {
             workdir_path: String::from("/home/karnes/Servers/DayZTestServer"),
             workshop_path: String::from("/home/karnes/Servers/!Workshop"),
             installed_mods: installed_mods.clone(),
+            start_parameters: Some("".to_string()),
             is_active: true,
         };
 

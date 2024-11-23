@@ -102,6 +102,7 @@ pub struct Profile {
     pub name: String,
     pub workdir_path: String,
     pub workshop_path: String,
+    pub start_parameters: Option<String>,
     pub installed_mods: Vec<Value>,
     pub is_active: bool,
 }

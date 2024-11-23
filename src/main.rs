@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use dayz_tool_cli::commands::{
-    calculate_dnc, create_profile, delete_profile, generate_guid, install_mods,
-    list_installed_mods, list_profiles, show_profile, switch_profile, uninstall_mods, update_mods,
-    update_profile,
+    calculate_dnc, create_profile, delete_profile, generate_guid, generate_startup_script,
+    install_mods, list_installed_mods, list_profiles, show_profile, switch_profile, uninstall_mods,
+    update_mods, update_profile,
 };
 use dayz_tool_cli::utils::{
     create_initial_profile, get_config_path, get_profile, get_render_config, init_logger,
@@ -111,6 +111,15 @@ enum GenerateCommands {
         #[arg(short = 'n', long)]
         night: Option<String>,
     },
+
+    /// Generates a server_start script for the DayZ server.
+    ///
+    /// # Usage
+    ///
+    /// ```bash
+    /// dayz-tool-cli generate start-up
+    /// ```
+    StartUp,
 }
 
 #[derive(Subcommand)]
@@ -258,6 +267,13 @@ fn main() {
                         error!("Please enter both the day and night length.");
                     }
                 }
+                GenerateCommands::StartUp => match profile {
+                    Ok(profile) => match generate_startup_script(profile) {
+                        Ok(_) => info!("Startup script generated successfully!"),
+                        Err(_) => error!("Failed to generate startup script"),
+                    },
+                    Err(_) => error!("No profile found"),
+                },
             },
             Commands::Mods { subcommands } => match subcommands {
                 ModCommands::Install => match profile {

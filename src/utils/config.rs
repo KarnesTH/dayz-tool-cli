@@ -213,6 +213,7 @@ pub fn create_initial_profile(config_path: &PathBuf) -> Result<(), ConfigError> 
         workdir_path,
         workshop_path,
         installed_mods: vec![],
+        start_parameters: Some("".to_string()),
         is_active: true,
     };
 
